@@ -78,6 +78,7 @@ model Customer {
   wallets     Wallet[]
   onrampOrders OnrampOrder[]
   offrampOrders OfframpOrder[]
+  remittanceOrders RemittanceOrder[]
   webhooks    Webhook[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -299,4 +300,54 @@ model WebhookDelivery {
 
   @@index([webhookId, succeededAt])
   @@index([nextAttemptAt])
+}
+
+// ─── Remittance Orders (Cross-border inbound) ─────────────────────────────────
+
+enum RemittanceStatus {
+  PENDING
+  FUNDED
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+model RemittanceOrder {
+  id               String           @id @default(cuid())
+  customerId       String
+  customer         Customer         @relation(fields: [customerId], references: [id])
+
+  corridorCode     String           // "MY" | "SA" | "AE" | "SG" | "US"
+  sourceCurrency   String           // "MYR" | "SAR" | "AED" | "SGD" | "USD"
+  amountSource     String           // sender amount
+  feeSource        String
+  netAmountSource  String
+  fxRate           String           // stored as string to preserve precision
+  spreadBps        Int
+  quotedAmountIdr  String
+
+  // Recipient details
+  recipientName          String
+  recipientBank          String?
+  recipientAccountNumber String?
+  recipientEwallet       String?
+  recipientPhone         String?
+
+  // Linked disbursement
+  offrampOrderId   String?          @unique
+
+  // Execution
+  status           RemittanceStatus @default(PENDING)
+  externalRef      String?          // partner payment reference
+  expiresAt        DateTime
+  completedAt      DateTime?
+  failedAt         DateTime?
+  failReason       String?
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([customerId, status])
+  @@index([createdAt(sort: Desc)])
 }
