@@ -56,7 +56,29 @@ export async function dispatchWebhookEvent(
   )
 }
 
-async function deliverWebhook(params: {
+export async function retryWebhookDelivery(deliveryId: string): Promise<void> {
+  const delivery = await prisma.webhookDelivery.findUniqueOrThrow({
+    where: { id: deliveryId },
+    include: { webhook: true },
+  })
+
+  const payload = delivery.payload as unknown as WebhookPayload
+  const payloadStr = JSON.stringify(payload)
+  const signature = signPayload(payloadStr)
+
+  await deliverWebhook({
+    webhookId: delivery.webhookId,
+    url: delivery.webhook.url,
+    event: delivery.event as WebhookEvent,
+    payload,
+    payloadStr,
+    signature,
+    attempt: delivery.attempts + 1,
+    deliveryId: delivery.id,
+  })
+}
+
+export async function deliverWebhook(params: {
   webhookId: string
   url: string
   event: WebhookEvent

@@ -142,6 +142,10 @@ export type WebhookEvent =
   | 'offramp.failed'
   | 'kyc.approved'
   | 'kyc.rejected'
+  | 'remittance.created'
+  | 'remittance.funded'
+  | 'remittance.completed'
+  | 'remittance.failed'
 
 export interface WebhookPayload {
   id: string
