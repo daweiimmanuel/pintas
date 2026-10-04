@@ -70,6 +70,8 @@ SWIFT transfers take 1–3 days. Indonesian importers paying USD invoices are ex
 
 There is no production-ready, licensed, API-accessible layer for IDR ↔ stablecoin conversion. Indonesian fintechs building remittance apps, neobanks, or DeFi interfaces must cobble together unlicensed exchange integrations, manual BI-FAST flows, and fragmented e-wallet disbursements. Each integration takes 3–6 months and exposes the builder to regulatory risk.
 
+*Market signal:* DurianPay — Indonesia's largest domestic payment orchestrator ($5.5B TPV, 400+ enterprise clients, profitable in 2025) — announced in Q1 2026 that it is building stablecoin-based cross-border infrastructure. Their approach is **gateway-first, stablecoin added**: layering stablecoin rails on top of an existing domestic payout product. Pintas's architecture is the inverse — **stablecoin-native**, with IDR disbursement as the output layer — giving Pintas a structural advantage in multi-chain support, corridor breadth, and OTC depth from day one.
+
 ### Pain Point 4: E-Wallet Fragmentation Without a Unified Off-Ramp
 
 GoPay, OVO, Dana, ShopeePay, and LinkAja together serve >70% of Indonesia's digital payment market — yet none natively support stablecoin deposit. A remittance receiver in Indonesia cannot receive USDT into their GoPay wallet. There is no unified, OJK-licensed bridge that converts stablecoin inflows to e-wallet disbursements.
@@ -207,15 +209,18 @@ To operate legally, Pintas must obtain:
 
 > Pintas uses a VWAP aggregation engine across partner exchanges for best execution pricing.
 
-### 6.3 E-Wallet Disbursement (Tier 3)
+### 6.3 E-Wallet & Bank Disbursement (Tier 3)
 
-| Wallet | Users | Integration Method | MDR |
+| Provider | Coverage | Integration Method | Speed |
 |---|---|---|---|
-| **GoPay** | 25M+ active | Xendit/Midtrans API | 0% <IDR 500k (QRIS) |
-| **OVO** | 20M+ active | Xendit API | 0% <IDR 500k (QRIS) |
-| **Dana** | 30M+ active | Dana B2B API / Xendit | 0% <IDR 500k (QRIS) |
-| **ShopeePay** | 20M+ active | Via Midtrans | 0% <IDR 500k (QRIS) |
-| **LinkAja** | 10M+ active | LinkAja B2B API | Negotiated |
+| **GoPay** | 25M+ active users | Xendit/Midtrans API | Instant (QRIS, 0% MDR <IDR 500k) |
+| **OVO** | 20M+ active users | Xendit API | Instant (QRIS, 0% MDR <IDR 500k) |
+| **Dana** | 30M+ active users | Dana B2B API / Xendit | Instant (QRIS, 0% MDR <IDR 500k) |
+| **ShopeePay** | 20M+ active users | Via Midtrans | Instant (QRIS, 0% MDR <IDR 500k) |
+| **LinkAja** | 10M+ active users | LinkAja B2B API | Instant (negotiated MDR) |
+| **DurianPay Pay Out** | 130+ banks + 20+ e-wallets | DurianPay SNAP API (`POST /v1.0/transfer-interbank`, `POST /v1.0/emoney/topup`) | Instant (BI-FAST 24/7); max IDR 500M/txn major banks |
+
+> **DurianPay as disbursement backbone:** DurianPay's SNAP-compliant API covers BI-FAST transfers, RTGS for amounts ≥ IDR 250M, and all major e-wallets under a single integration. It is a cost-effective complement to Xendit/Midtrans for high-volume bank disbursement, particularly for amounts exceeding standard e-wallet limits. DurianPay also offers real-time account validation (`POST /v1.0/account-inquiry-external`) for 90+ banks — critical for reducing failed off-ramp disbursements.
 
 ### 6.4 International Liquidity & Corridor Partners (Tier 4)
 
@@ -229,6 +234,22 @@ To operate legally, Pintas must obtain:
 | **PayNow (Singapore)** | QR cross-border linkage (live) | SG → ID |
 | **STC Pay (Saudi Arabia)** | TBD partnership | SA → ID |
 | **UAE Exchange** | TBD partnership | UAE → ID |
+
+### 6.6 Strategic Partnership Opportunity: DurianPay
+
+DurianPay is the most strategically significant player to engage early. Its Q1 2026 announcement of stablecoin-based cross-border payments positions it simultaneously as:
+
+| Relationship | Basis | Timeline |
+|---|---|---|
+| **Disbursement partner** | DurianPay's 130+ bank/e-wallet instant payout network covers exactly what Pintas needs for IDR off-ramp last-mile delivery | **Now (Phase 1)** |
+| **Emerging competitor** | Once their stablecoin cross-border product ships, they will target the same B2B cross-border customer base | **Medium-term (12–18 months)** |
+| **White-label candidate** | DurianPay needs stablecoin rails (their weakness); Pintas needs payout depth (DurianPay's strength) — mutual white-label arrangement is possible | **Phase 2+ (6–12 months)** |
+
+**Recommended action:** Initiate partnership discussion before DurianPay ships their own stablecoin rails. A commercial API agreement locking in DurianPay as Pintas's preferred disbursement layer — with reciprocal referral for domestic-only use cases — delays their need to build independently and cements Pintas as the stablecoin infrastructure partner for their 400+ enterprise clients.
+
+**Risk:** If DurianPay ships cross-border without partnering, their existing 400-client base and profitability give them faster distribution than Pintas can build from zero. Mitigant: Pintas's OJK **DFA Trader license** (stablecoin-native) is structurally different from DurianPay's **BI PSP Category 2 license** (payment aggregator). They cannot legally substitute — they still need a DFA-licensed partner for the stablecoin leg.
+
+---
 
 ### 6.5 Blockchain Networks
 
@@ -733,15 +754,20 @@ Pintas maintains a full AML/CFT program compliant with SEOJK 20/2024 and FATF Re
 
 ## Appendix A: Competitive Landscape
 
-| Provider | Type | Indonesia Corridor | API | Stablecoin | OJK Licensed |
+| Provider | Type | Indonesia Corridor | API | Stablecoin | License |
 |---|---|---|---|---|---|
-| Western Union | Incumbent remittance | ✓ | Limited | ✗ | Partial (as payment company) |
-| Wise | Digital remittance | ✓ | ✓ | ✗ | Partial |
-| Indodax | Crypto exchange | ✓ | ✓ (exchange only) | ✓ | ✓ (DFA Exchange) |
-| Tokocrypto | Crypto exchange | ✓ | ✓ (exchange only) | ✓ | ✓ (PFAK) |
-| **Pintas** | **Payment infrastructure** | **✓** | **✓ (full)** | **✓** | **✓ (DFA Trader, applying)** |
+| Western Union | Incumbent remittance | ✓ | Limited | ✗ | BI (payment company) |
+| Wise | Digital remittance | ✓ | ✓ | ✗ | BI (partial) |
+| Indodax | Crypto exchange | ✓ | ✓ (exchange only) | ✓ | OJK DFA Exchange |
+| Tokocrypto | Crypto exchange | ✓ | ✓ (exchange only) | ✓ | OJK (PFAK) |
+| **DurianPay** | Payment orchestrator → cross-border | Building (announced Q1 2026) | ✓ (full, domestic; cross-border TBD) | ✓ (planned, not live) | BI PSP Cat 2 + OJK registered (aggregator) |
+| **Pintas** | **Stablecoin payment infrastructure** | **✓ (core product)** | **✓ (full — on-ramp, off-ramp, cross-border, OTC)** | **✓ (native)** | **OJK DFA Trader (applying)** |
 
-**Pintas's differentiation:** The only player combining a full REST API for stablecoin on/off-ramp, multi-corridor cross-border settlement, OTC desk, and OJK compliance in a single infrastructure layer. Exchanges are customers, not competitors.
+**Competitive positioning:**
+
+- **vs. Incumbents (WU, Wise):** Pintas is 10× cheaper (sub-1% vs. 5–8%) and settles in <2 minutes vs. 1–3 days. No stablecoin capability.
+- **vs. Exchanges (Indodax, Tokocrypto):** Exchanges are IDR liquidity partners, not competitors. They lack cross-border corridors, remittance disbursement, OTC, and white-label.
+- **vs. DurianPay:** The most nuanced comparison. DurianPay has Indonesia's deepest domestic disbursement network (130+ banks, 400+ enterprise clients, $5.5B TPV) but is a **payment aggregator adding stablecoin**, not a stablecoin-native infrastructure. Their BI PSP Category 2 license does not cover digital financial asset trading — they will need an OJK DFA-licensed partner for the stablecoin leg regardless. Pintas holds the DFA Trader license, making it the infrastructure layer DurianPay cannot replace. The preferred strategy is partnership (Pintas stablecoin rails + DurianPay IDR payout network), not head-on competition.
 
 ---
 
