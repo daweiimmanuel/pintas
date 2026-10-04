@@ -1,8 +1,7 @@
 import { Decimal } from 'decimal.js'
+import { getRedis } from '../../lib/redis.js'
 
-// Cached FX rates: key = "MYR_IDR", value = {rate, fetchedAt}
-const fxCache = new Map<string, { rate: Decimal; fetchedAt: Date }>()
-const CACHE_TTL_MS = 60_000 // 1 min
+const CACHE_TTL_S = 60
 
 // Hard-coded fallback rates (used if API unavailable / sandbox)
 const FALLBACK_RATES: Record<string, string> = {
@@ -17,22 +16,25 @@ const FALLBACK_RATES: Record<string, string> = {
 
 export async function getFxRate(from: string, to: string): Promise<Decimal> {
   const pair = `${from}_${to}`
-  const cached = fxCache.get(pair)
+  const redisKey = `pintas:fx:${pair}`
 
-  if (cached && Date.now() - cached.fetchedAt.getTime() < CACHE_TTL_MS) {
-    return cached.rate
+  try {
+    const cached = await getRedis().get(redisKey)
+    if (cached) return new Decimal(cached)
+  } catch {
+    // Redis unavailable — fall through to live fetch
   }
 
   try {
     const rate = await fetchLiveRate(from, to)
-    fxCache.set(pair, { rate, fetchedAt: new Date() })
+    getRedis().set(redisKey, rate.toString(), 'EX', CACHE_TTL_S).catch(() => {})
     return rate
   } catch {
     // Fall back to hardcoded rates in sandbox/test environments
     const fallback = FALLBACK_RATES[pair]
     if (fallback) {
       const rate = new Decimal(fallback)
-      fxCache.set(pair, { rate, fetchedAt: new Date() })
+      getRedis().set(redisKey, rate.toString(), 'EX', CACHE_TTL_S).catch(() => {})
       return rate
     }
     throw new Error(`No FX rate available for ${pair}`)

@@ -6,7 +6,7 @@ const transactionsRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /v1/transactions — list onramp + offramp orders
   fastify.get('/transactions', async (req, reply) => {
     const schema = z.object({
-      type: z.enum(['onramp', 'offramp', 'all']).default('all'),
+      type: z.enum(['onramp', 'offramp', 'remittance', 'all']).default('all'),
       status: z.string().optional(),
       limit: z.coerce.number().min(1).max(100).default(20),
       before: z.string().optional(), // cursor pagination
@@ -17,8 +17,8 @@ const transactionsRoutes: FastifyPluginAsync = async (fastify) => {
 
     const cursor = before ? { id: before } : undefined
 
-    const [onrampOrders, offrampOrders] = await Promise.all([
-      type !== 'offramp'
+    const [onrampOrders, offrampOrders, remittanceOrders] = await Promise.all([
+      type !== 'offramp' && type !== 'remittance'
         ? prisma.onrampOrder.findMany({
             where: {
               customerId: req.customerId,
@@ -30,8 +30,19 @@ const transactionsRoutes: FastifyPluginAsync = async (fastify) => {
             include: { virtualAccount: true },
           })
         : [],
-      type !== 'onramp'
+      type !== 'onramp' && type !== 'remittance'
         ? prisma.offrampOrder.findMany({
+            where: {
+              customerId: req.customerId,
+              ...(status ? { status: status as never } : {}),
+            },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            ...(cursor ? { cursor, skip: 1 } : {}),
+          })
+        : [],
+      type !== 'onramp' && type !== 'offramp'
+        ? prisma.remittanceOrder.findMany({
             where: {
               customerId: req.customerId,
               ...(status ? { status: status as never } : {}),
@@ -46,6 +57,7 @@ const transactionsRoutes: FastifyPluginAsync = async (fastify) => {
     const items = [
       ...onrampOrders.map((o) => ({ type: 'onramp' as const, ...o })),
       ...offrampOrders.map((o) => ({ type: 'offramp' as const, ...o })),
+      ...remittanceOrders.map((o) => ({ type: 'remittance' as const, ...o })),
     ]
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, limit)

@@ -10,6 +10,7 @@ import transactionsRoutes from './routes/transactions.js'
 import kycRoutes from './routes/kyc.js'
 import webhookRoutes from './routes/webhooks.js'
 import { corridorRoutes } from './routes/corridor.js'
+import otcRoutes from './routes/otc.js'
 
 export async function buildServer() {
   const fastify = Fastify({
@@ -61,6 +62,7 @@ export async function buildServer() {
       await v1.register(kycRoutes)
       await v1.register(webhookRoutes)
       await v1.register(corridorRoutes)
+      await v1.register(otcRoutes)
     },
     { prefix: '/v1' }
   )

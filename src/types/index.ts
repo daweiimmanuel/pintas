@@ -146,6 +146,9 @@ export type WebhookEvent =
   | 'remittance.funded'
   | 'remittance.completed'
   | 'remittance.failed'
+  | 'otc.accepted'
+  | 'otc.settled'
+  | 'otc.failed'
 
 export interface WebhookPayload {
   id: string
