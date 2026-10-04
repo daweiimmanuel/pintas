@@ -1,0 +1,302 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum OrderStatus {
+  PENDING
+  FUNDED
+  CONVERTING
+  DISBURSING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum Chain {
+  POLYGON
+  TRON
+  STELLAR
+  ETHEREUM
+}
+
+enum Stablecoin {
+  USDT
+  USDC
+}
+
+enum KycStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum KycTier {
+  TIER1
+  TIER2
+  TIER3
+}
+
+enum DisbursementType {
+  BANK_TRANSFER
+  EWALLET
+}
+
+// ─── Authentication ───────────────────────────────────────────────────────────
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  keyHash   String   @unique
+  name      String
+  scopes    String[]
+  ipAllowlist String[]
+  customerId String
+  customer  Customer @relation(fields: [customerId], references: [id])
+  lastUsedAt DateTime?
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  revokedAt DateTime?
+}
+
+// ─── Customers ────────────────────────────────────────────────────────────────
+
+model Customer {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  kybStatus   KycStatus @default(PENDING)
+  tier        KycTier   @default(TIER1)
+  apiKeys     ApiKey[]
+  wallets     Wallet[]
+  onrampOrders OnrampOrder[]
+  offrampOrders OfframpOrder[]
+  webhooks    Webhook[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Wallets ──────────────────────────────────────────────────────────────────
+
+model Wallet {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id])
+  chain       Chain
+  address     String
+  stablecoin  Stablecoin
+  label       String?
+  createdAt   DateTime @default(now())
+  @@unique([customerId, chain, stablecoin])
+}
+
+// ─── Exchange Rates ───────────────────────────────────────────────────────────
+
+model ExchangeRate {
+  id         String     @id @default(cuid())
+  pair       String     // e.g. "IDR_USDT"
+  bid        Decimal    @db.Decimal(20, 8)
+  ask        Decimal    @db.Decimal(20, 8)
+  mid        Decimal    @db.Decimal(20, 8)
+  venue      String     // "indodax" | "tokocrypto" | "vwap"
+  volume24h  Decimal?   @db.Decimal(20, 8)
+  fetchedAt  DateTime   @default(now())
+
+  @@index([pair, venue, fetchedAt(sort: Desc)])
+}
+
+// ─── Virtual Accounts ─────────────────────────────────────────────────────────
+
+model VirtualAccount {
+  id           String   @id @default(cuid())
+  bank         String   // "BCA" | "MANDIRI" | "BNI" | "BRI"
+  vaNumber     String   @unique
+  orderId      String   @unique
+  onrampOrder  OnrampOrder @relation(fields: [orderId], references: [id])
+  amount       Decimal  @db.Decimal(20, 2)
+  currency     String   @default("IDR")
+  expiresAt    DateTime
+  paidAt       DateTime?
+  createdAt    DateTime @default(now())
+}
+
+// ─── On-Ramp Orders (IDR → Stablecoin) ───────────────────────────────────────
+
+model OnrampOrder {
+  id             String      @id @default(cuid())
+  customerId     String
+  customer       Customer    @relation(fields: [customerId], references: [id])
+
+  // Input
+  amountIdr      Decimal     @db.Decimal(20, 2)
+  stablecoin     Stablecoin
+  chain          Chain
+
+  // Quote
+  quotedRate     Decimal     @db.Decimal(20, 8)
+  quotedAmount   Decimal     @db.Decimal(20, 8)
+  spreadBps      Int         // basis points
+  quoteExpiresAt DateTime
+
+  // Settlement
+  status         OrderStatus @default(PENDING)
+  destinationAddress String
+
+  // Execution results
+  actualRate     Decimal?    @db.Decimal(20, 8)
+  actualAmount   Decimal?    @db.Decimal(20, 8)
+  onchainTxHash  String?
+  onchainBlock   Int?
+
+  // Relations
+  virtualAccount VirtualAccount?
+  webhookDeliveries WebhookDelivery[]
+
+  // Metadata
+  referenceId    String?     // customer's own reference
+  metadata       Json?
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  completedAt    DateTime?
+  failedAt       DateTime?
+  failReason     String?
+
+  @@index([customerId, status])
+  @@index([createdAt(sort: Desc)])
+}
+
+// ─── Off-Ramp Orders (Stablecoin → IDR) ──────────────────────────────────────
+
+model OfframpOrder {
+  id             String      @id @default(cuid())
+  customerId     String
+  customer       Customer    @relation(fields: [customerId], references: [id])
+
+  // Input
+  amountStablecoin Decimal   @db.Decimal(20, 8)
+  stablecoin     Stablecoin
+  chain          Chain
+
+  // Quote
+  quotedRate     Decimal     @db.Decimal(20, 8)
+  quotedAmountIdr Decimal    @db.Decimal(20, 2)
+  spreadBps      Int
+  quoteExpiresAt DateTime
+
+  // Destination
+  disbursementType DisbursementType
+  bankCode       String?
+  accountNumber  String?
+  accountName    String?
+  ewalletCode    String?     // "GOPAY" | "OVO" | "DANA" | "SHOPEEPAY" | "LINKAJA"
+  ewalletPhone   String?
+
+  // Inbound (stablecoin deposit)
+  depositAddress String      // Pintas settlement address
+  status         OrderStatus @default(PENDING)
+  receivedTxHash String?
+  receivedAmount Decimal?    @db.Decimal(20, 8)
+
+  // Exchange execution
+  actualRate     Decimal?    @db.Decimal(20, 8)
+  actualAmountIdr Decimal?   @db.Decimal(20, 2)
+
+  // Disbursement
+  disbursementId String?     // DurianPay / Xendit txn ID
+  disbursementRef String?    // Bank reference number
+
+  // Relations
+  webhookDeliveries WebhookDelivery[]
+
+  // Metadata
+  referenceId    String?
+  metadata       Json?
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  completedAt    DateTime?
+  failedAt       DateTime?
+  failReason     String?
+
+  @@index([customerId, status])
+  @@index([depositAddress])
+  @@index([createdAt(sort: Desc)])
+}
+
+// ─── KYC Records ──────────────────────────────────────────────────────────────
+
+model KycRecord {
+  id            String    @id @default(cuid())
+  customerId    String
+  tier          KycTier
+  status        KycStatus @default(PENDING)
+
+  // Tier 1
+  nik           String?   // National ID
+  fullName      String?
+  dateOfBirth   DateTime?
+  selfieUrl     String?
+
+  // Tier 2 (KYB)
+  npwp          String?   // Tax ID
+  companyName   String?
+  nibNumber     String?   // Business registration
+
+  // Provider response
+  providerRef   String?
+  providerScore Int?
+  notes         String?
+
+  reviewedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ─── Webhooks ─────────────────────────────────────────────────────────────────
+
+model Webhook {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id])
+  url         String
+  events      String[] // ["onramp.completed", "offramp.completed", ...]
+  secret      String   // HMAC signing secret
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deliveries  WebhookDelivery[]
+}
+
+model WebhookDelivery {
+  id             String   @id @default(cuid())
+  webhookId      String
+  webhook        Webhook  @relation(fields: [webhookId], references: [id])
+  event          String
+  payload        Json
+  onrampOrderId  String?
+  onrampOrder    OnrampOrder? @relation(fields: [onrampOrderId], references: [id])
+  offrampOrderId String?
+  offrampOrder   OfframpOrder? @relation(fields: [offrampOrderId], references: [id])
+
+  attempts       Int      @default(0)
+  lastAttemptAt  DateTime?
+  nextAttemptAt  DateTime?
+  succeededAt    DateTime?
+  failedAt       DateTime?
+  lastStatusCode Int?
+  lastResponse   String?
+
+  createdAt      DateTime @default(now())
+
+  @@index([webhookId, succeededAt])
+  @@index([nextAttemptAt])
+}
