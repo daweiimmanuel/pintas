@@ -1,16 +1,15 @@
 import crypto from 'crypto'
 import Decimal from 'decimal.js'
 import { prisma } from '../../db/client.js'
+import { getRedis } from '../../lib/redis.js'
 import { fetchIndodaxRate } from './indodax.js'
 import { fetchTokocryptoRate } from './tokocrypto.js'
 import type { RateQuote, VwapRate, OnrampQuote, OfframpQuote } from '../../types/index.js'
 import { Stablecoin, Chain } from '../../types/index.js'
 
-const RATE_CACHE_TTL_MS = 10_000
+const RATE_CACHE_TTL_S = 10
 const SPREAD_BPS = 40
 const QUOTE_VALIDITY_MS = 30_000
-
-const rateCache = new Map<string, { rate: VwapRate; cachedAt: number }>()
 
 async function fetchAllRates(pair: 'USDT' | 'USDC'): Promise<RateQuote[]> {
   const results = await Promise.allSettled([
@@ -25,10 +24,13 @@ async function fetchAllRates(pair: 'USDT' | 'USDC'): Promise<RateQuote[]> {
 
 export async function getVwapRate(pair: 'USDT' | 'USDC'): Promise<VwapRate> {
   const cacheKey = `IDR_${pair}`
-  const cached = rateCache.get(cacheKey)
+  const redisKey = `pintas:vwap:${cacheKey}`
 
-  if (cached && Date.now() - cached.cachedAt < RATE_CACHE_TTL_MS) {
-    return cached.rate
+  try {
+    const cached = await getRedis().get(redisKey)
+    if (cached) return JSON.parse(cached) as VwapRate
+  } catch {
+    // Redis miss — fall through to live fetch
   }
 
   const quotes = await fetchAllRates(pair)
@@ -62,7 +64,7 @@ export async function getVwapRate(pair: 'USDT' | 'USDC'): Promise<VwapRate> {
     fetchedAt: new Date(),
   }
 
-  rateCache.set(cacheKey, { rate, cachedAt: Date.now() })
+  getRedis().set(redisKey, JSON.stringify(rate), 'EX', RATE_CACHE_TTL_S).catch(() => {})
 
   prisma.exchangeRate.create({
     data: {

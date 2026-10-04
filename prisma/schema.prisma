@@ -79,6 +79,7 @@ model Customer {
   onrampOrders OnrampOrder[]
   offrampOrders OfframpOrder[]
   remittanceOrders RemittanceOrder[]
+  otcOrders    OtcOrder[]
   webhooks    Webhook[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -303,6 +304,58 @@ model WebhookDelivery {
 }
 
 // ─── Remittance Orders (Cross-border inbound) ─────────────────────────────────
+
+// ─── OTC Desk ─────────────────────────────────────────────────────────────────
+
+enum OtcStatus {
+  QUOTED
+  ACCEPTED
+  EXECUTING
+  SETTLED
+  EXPIRED
+  CANCELLED
+  FAILED
+}
+
+enum OtcSide {
+  BUY
+  SELL
+}
+
+model OtcOrder {
+  id               String     @id @default(cuid())
+  customerId       String
+  customer         Customer   @relation(fields: [customerId], references: [id])
+
+  side             OtcSide
+  stablecoin       Stablecoin
+  chain            Chain
+
+  amountIdr        Decimal    @db.Decimal(20, 2)
+  amountStablecoin Decimal    @db.Decimal(20, 8)
+  rate             Decimal    @db.Decimal(20, 8)
+  spreadBps        Int
+
+  status           OtcStatus  @default(QUOTED)
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  settledAt        DateTime?
+
+  destinationAddress String?   // for BUY orders
+  bankCode           String?   // for SELL orders
+  accountNumber      String?
+  accountName        String?
+
+  settlementTxHash String?
+  counterpartyRef  String?
+  failReason       String?
+
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([customerId, status])
+  @@index([createdAt(sort: Desc)])
+}
 
 enum RemittanceStatus {
   PENDING

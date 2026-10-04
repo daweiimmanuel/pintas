@@ -2,6 +2,7 @@ import { Chain, Stablecoin } from '../../types/index.js'
 import type { TransferResult, WalletBalance } from '../../types/index.js'
 import { sendPolygonStablecoin, getPolygonBalance } from './polygon.js'
 import { sendStellarStablecoin, getStellarBalance } from './stellar.js'
+import { sendTronUsdt } from './tron.js'
 
 export { watchPolygonDeposit } from './polygon.js'
 
@@ -19,7 +20,7 @@ export async function sendStablecoin(params: {
     case Chain.STELLAR:
       return sendStellarStablecoin(params)
     case Chain.TRON:
-      throw new Error('TRON disbursement not yet implemented — use Polygon or Stellar')
+      return sendTronUsdt({ to: params.to, amount: params.amount, stablecoin: params.stablecoin })
     default:
       throw new Error(`Unsupported chain: ${params.chain}`)
   }

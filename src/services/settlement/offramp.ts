@@ -2,10 +2,11 @@ import Decimal from 'decimal.js'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../../db/client.js'
 import { quoteOfframp } from '../exchange/aggregator.js'
-import { disburseToBankAccount, disburseToEwallet } from '../disbursement/index.js'
+import { disburseToBankAccount, disburseToEwallet, verifyBankAccount } from '../disbursement/index.js'
 import { getSettlementAddress } from '../blockchain/index.js'
 import { dispatchWebhookEvent } from '../webhook/delivery.js'
 import { DisbursementType } from '../../types/index.js'
+import { config } from '../../config/index.js'
 import type { Chain, Stablecoin, OfframpQuote } from '../../types/index.js'
 
 export interface CreateOfframpBankParams {
@@ -42,6 +43,20 @@ function isEwallet(p: CreateOfframpParams): p is CreateOfframpEwalletParams {
 export async function createOfframpOrder(
   params: CreateOfframpParams
 ): Promise<{ order: object; quote: OfframpQuote }> {
+  // Pre-validate bank account before locking in the quote
+  if (!isEwallet(params) && config.DURIANPAY_API_KEY) {
+    const verification = await verifyBankAccount({
+      bankCode: (params as CreateOfframpBankParams).bankCode,
+      accountNumber: (params as CreateOfframpBankParams).accountNumber,
+    })
+    if (!verification.valid) {
+      throw Object.assign(
+        new Error('Bank account verification failed — check the bank code and account number'),
+        { statusCode: 400 }
+      )
+    }
+  }
+
   const quote = await quoteOfframp({
     amountStablecoin: params.amountStablecoin,
     stablecoin: params.stablecoin,
