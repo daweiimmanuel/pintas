@@ -27,7 +27,10 @@ export async function quoteOtc(params: OtcQuoteParams) {
   const amountIdr = new Decimal(params.amountIdr)
 
   if (amountIdr.lt(MIN_IDR)) {
-    throw new Error(`OTC minimum is IDR ${MIN_IDR.toFixed(0)}. Requested: IDR ${params.amountIdr}`)
+    throw Object.assign(
+      new Error(`OTC minimum is IDR ${MIN_IDR.toFixed(0)}. Requested: IDR ${params.amountIdr}`),
+      { statusCode: 400 }
+    )
   }
 
   const spreadBps = params.spreadBps ?? DEFAULT_SPREAD_BPS

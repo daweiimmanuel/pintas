@@ -1,4 +1,5 @@
 import { Decimal } from 'decimal.js'
+import { config } from '../../config/index.js'
 import { getRedis } from '../../lib/redis.js'
 
 const CACHE_TTL_S = 60
@@ -42,8 +43,7 @@ export async function getFxRate(from: string, to: string): Promise<Decimal> {
 }
 
 async function fetchLiveRate(from: string, to: string): Promise<Decimal> {
-  // Use Open Exchange Rates (or similar) if configured, else throw to trigger fallback
-  const apiKey = process.env.OPEN_EXCHANGE_RATES_API_KEY
+  const apiKey = config.OPEN_EXCHANGE_RATES_API_KEY
   if (!apiKey) throw new Error('No FX API key configured')
 
   const url = `https://openexchangerates.org/api/latest.json?app_id=${apiKey}&base=USD&symbols=${from},${to}`

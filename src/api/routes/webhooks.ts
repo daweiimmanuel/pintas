@@ -2,11 +2,15 @@ import crypto from 'crypto'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../../db/client.js'
+import type { WebhookEvent } from '../../types/index.js'
 
-const VALID_EVENTS = [
+const VALID_EVENTS: readonly WebhookEvent[] = [
   'onramp.created', 'onramp.funded', 'onramp.completed', 'onramp.failed',
   'offramp.created', 'offramp.funded', 'offramp.completed', 'offramp.failed',
   'kyc.approved', 'kyc.rejected',
+  'remittance.created', 'remittance.funded', 'remittance.completed', 'remittance.failed',
+  'remittance.expired',
+  'otc.accepted', 'otc.settled', 'otc.failed', 'otc.expired',
 ] as const
 
 const webhookRoutes: FastifyPluginAsync = async (fastify) => {
@@ -14,7 +18,7 @@ const webhookRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/webhooks', async (req, reply) => {
     const schema = z.object({
       url: z.string().url().startsWith('https://'),
-      events: z.array(z.enum(VALID_EVENTS)).min(1),
+      events: z.array(z.enum(VALID_EVENTS as unknown as [string, ...string[]])).min(1),
     })
 
     const body = schema.parse(req.body)
