@@ -6,7 +6,7 @@ Move money into and out of Indonesia at the speed of the internet.
 
 ## What is Pintas?
 
-**Pintas** (Indonesian: "shortcut") is an API-first payment infrastructure layer for Indonesia, modeled on [Linka](https://www.linka.xyz) — Latin America's stablecoin payment rails. Pintas provides the programmable on/off-ramps, cross-border settlement, and compliance tooling that fintechs, remittance companies, and enterprises need to move money through the Indonesian corridor.
+**Pintas** (Indonesian: "shortcut") is an API-first payment infrastructure layer for Indonesia. Pintas provides the programmable on/off-ramps, cross-border settlement, and compliance tooling that fintechs, remittance companies, and enterprises need to move money through the Indonesian corridor.
 
 ## Core Capabilities
 
