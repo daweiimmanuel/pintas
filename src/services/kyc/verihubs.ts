@@ -116,6 +116,24 @@ export async function verifyTier2(req: KycTier2Request): Promise<KycResult> {
   }
 }
 
+export interface KycTier3Request {
+  companyName: string
+  npwp: string
+  uboNames: string[]
+  financialStatementUrl?: string
+  amlQuestionnaireUrl?: string
+}
+
+// Tier 3 uses a manual review queue — no Verihubs API call.
+// Creates a PENDING record for compliance team review (1–2 business days).
+export function verifyTier3(req: KycTier3Request): KycResult {
+  return {
+    providerRef: `tier3_manual_${req.npwp}`,
+    status: 'pending',
+    notes: `Manual review required. UBOs: ${req.uboNames.join(', ')}`,
+  }
+}
+
 function mockKycApproval(ref: string): KycResult {
   return { providerRef: ref, status: 'approved', score: 0.99 }
 }

@@ -15,6 +15,7 @@ import { prisma } from '../../db/client.js'
 import { getFxRate } from './fx-provider.js'
 import { disburseToBankAccount, disburseToEwallet } from '../disbursement/index.js'
 import { dispatchWebhookEvent } from '../webhook/delivery.js'
+import { submitTravelRule, travelRuleRequired } from '../travel-rule/index.js'
 import type { CorridorQuote, RemittanceOrder, CreateRemittanceParams } from './types.js'
 
 const CORRIDOR_SPREADS: Record<string, number> = {
@@ -151,6 +152,27 @@ export async function confirmRemittanceReceipt(
     receivedAmountSource,
     quotedAmountIdr: remittance.quotedAmountIdr,
   })
+
+  // Travel Rule — SEOJK 20/2024: submit VASP data for transfers > IDR 46M
+  if (travelRuleRequired(remittance.quotedAmountIdr)) {
+    await submitTravelRule({
+      transferId: remittanceId,
+      amountIdr: remittance.quotedAmountIdr,
+      originator: {
+        name: `Corridor sender (${remittance.corridorCode})`,
+        country: remittance.corridorCode === 'MY' ? 'MY'
+          : remittance.corridorCode === 'SA' ? 'SA'
+          : remittance.corridorCode === 'AE' ? 'AE'
+          : remittance.corridorCode === 'SG' ? 'SG'
+          : 'US',
+      },
+      beneficiary: {
+        name: remittance.recipientName,
+        accountNumber: remittance.recipientAccountNumber ?? remittance.recipientPhone ?? undefined,
+        country: 'ID',
+      },
+    })
+  }
 
   // Disburse IDR to recipient directly via DurianPay
   try {

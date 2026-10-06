@@ -57,7 +57,10 @@ vi.mock('../../src/db/client.js', () => ({
     },
     otcOrder: {
       findUnique: vi.fn().mockResolvedValue(null),
+      findUniqueOrThrow: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({ id: 'otc_001', status: 'QUOTED', createdAt: new Date(), updatedAt: new Date() }),
+      update: vi.fn().mockResolvedValue({ id: 'otc_001', status: 'ACCEPTED', createdAt: new Date(), updatedAt: new Date() }),
     },
     wallet: {
       create: vi.fn().mockResolvedValue({ id: 'wallet_001', chain: 'POLYGON', stablecoin: 'USDT', address: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', createdAt: new Date() }),
@@ -77,6 +80,8 @@ vi.mock('../../src/db/client.js', () => ({
       findFirst: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({ id: 'remit_001', status: 'PENDING', createdAt: new Date(), updatedAt: new Date() }),
+      findUniqueOrThrow: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({ id: 'remit_001', status: 'PROCESSING', createdAt: new Date(), updatedAt: new Date() }),
     },
     webhook: {
       findMany: vi.fn().mockResolvedValue([]),
@@ -129,6 +134,23 @@ vi.mock('../../src/services/kyc/verihubs.js', () => ({
     status: 'approved',
     score: 90,
   }),
+  verifyTier3: vi.fn().mockReturnValue({
+    providerRef: 'tier3_manual_123456789012345',
+    status: 'pending',
+    notes: 'Manual review required. UBOs: John Doe',
+  }),
+}))
+
+vi.mock('../../src/services/disbursement/index.js', () => ({
+  disburseToBankAccount: vi.fn().mockResolvedValue({ disbursementId: 'disb_001' }),
+  disburseToEwallet: vi.fn().mockResolvedValue({ disbursementId: 'disb_ew_001' }),
+  verifyBankAccount: vi.fn().mockResolvedValue({ valid: true, accountName: 'PT Test Indonesia' }),
+  validateDurianpayWebhook: vi.fn().mockReturnValue(true),
+}))
+
+vi.mock('../../src/services/travel-rule/index.js', () => ({
+  travelRuleRequired: vi.fn().mockReturnValue(false),
+  submitTravelRule: vi.fn().mockResolvedValue(undefined),
 }))
 
 // ─── AML mock (default: low risk, pass) ───────────────────────────────────────
@@ -666,6 +688,253 @@ describe('Authenticated: webhook delivery history', () => {
     expect(body.success).toBe(true)
     expect(Array.isArray(body.data)).toBe(true)
     expect(body.data[0].event).toBe('onramp.created')
+  })
+})
+
+// ─── Authenticated: POST /v1/remittance ───────────────────────────────────────
+
+describe('Authenticated: POST /v1/remittance', () => {
+  beforeEach(async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
+    vi.mocked(prisma.remittanceOrder.create).mockResolvedValue({
+      id: 'remit_001',
+      customerId: TEST_CUSTOMER_ID,
+      corridorCode: 'MY',
+      sourceCurrency: 'MYR',
+      amountSource: '1000',
+      feeSource: '2.00',
+      netAmountSource: '998.00',
+      fxRate: '3500.00',
+      spreadBps: 80,
+      quotedAmountIdr: '3417400',
+      recipientName: 'Budi Santoso',
+      recipientBank: 'BCA',
+      recipientAccountNumber: '1234567890',
+      recipientEwallet: null,
+      recipientPhone: null,
+      status: 'PENDING',
+      expiresAt: new Date(Date.now() + 5 * 60_000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as never)
+    vi.mocked(prisma.webhook.findMany).mockResolvedValue([])
+  })
+
+  it('POST /v1/remittance → 201 with quotedAmountIdr and corridorCode', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/v1/remittance',
+      payload: {
+        corridorCode: 'MY',
+        sourceCurrency: 'MYR',
+        amountSource: '1000',
+        recipientName: 'Budi Santoso',
+        recipientBank: 'BCA',
+        recipientAccountNumber: '1234567890',
+      },
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    // corridor route returns the order directly (not wrapped in { success, data })
+    expect(body.corridorCode).toBe('MY')
+    expect(Number(body.quotedAmountIdr)).toBeGreaterThan(0)
+    expect(body.status).toBe('PENDING')
+  })
+})
+
+// ─── Authenticated: POST /v1/remittance/:id/confirm ───────────────────────────
+
+describe('Authenticated: POST /v1/remittance/:id/confirm', () => {
+  const remittanceRecord = {
+    id: 'remit_001',
+    customerId: TEST_CUSTOMER_ID,
+    corridorCode: 'MY',
+    sourceCurrency: 'MYR',
+    amountSource: '1000',
+    feeSource: '2.00',
+    netAmountSource: '998.00',
+    fxRate: '3500.00',
+    spreadBps: 80,
+    quotedAmountIdr: '3417400',
+    recipientName: 'Budi Santoso',
+    recipientBank: 'BCA',
+    recipientAccountNumber: '1234567890',
+    recipientEwallet: null,
+    recipientPhone: null,
+    status: 'PENDING',
+    externalRef: null,
+    expiresAt: new Date(Date.now() + 5 * 60_000),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }
+
+  beforeEach(async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
+    // getRemittanceOrder uses findFirst; confirmRemittanceReceipt uses findUniqueOrThrow
+    vi.mocked(prisma.remittanceOrder.findFirst).mockResolvedValue(remittanceRecord as never)
+    vi.mocked(prisma.remittanceOrder.findUniqueOrThrow).mockResolvedValue(remittanceRecord as never)
+    vi.mocked(prisma.remittanceOrder.update).mockResolvedValue({ ...remittanceRecord, status: 'FUNDED' } as never)
+    vi.mocked(prisma.webhook.findMany).mockResolvedValue([])
+  })
+
+  it('POST /v1/remittance/:id/confirm happy path → 200 order COMPLETED', async () => {
+    const { disburseToBankAccount } = await import('../../src/services/disbursement/index.js')
+    vi.mocked(disburseToBankAccount).mockResolvedValue({ disbursementId: 'disb_001' } as never)
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/v1/remittance/remit_001/confirm',
+      payload: { receivedAmountSource: '1000', externalRef: 'PARTNER-REF-001' },
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+  })
+
+  it('POST /v1/remittance/:id/confirm disbursement failure → 500', async () => {
+    const { disburseToBankAccount } = await import('../../src/services/disbursement/index.js')
+    vi.mocked(disburseToBankAccount).mockRejectedValue(new Error('Bank unreachable'))
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/v1/remittance/remit_001/confirm',
+      payload: { receivedAmountSource: '1000', externalRef: 'PARTNER-REF-002' },
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBeGreaterThanOrEqual(500)
+  })
+})
+
+// ─── Authenticated: GET /v1/otc list ─────────────────────────────────────────
+
+describe('Authenticated: GET /v1/otc list', () => {
+  beforeEach(async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
+    vi.mocked(prisma.otcOrder.findMany).mockResolvedValue([
+      {
+        id: 'otc_001',
+        customerId: TEST_CUSTOMER_ID,
+        side: 'BUY',
+        stablecoin: 'USDT',
+        chain: 'TRON',
+        amountIdr: '75000000',
+        amountStablecoin: '4717.000000',
+        rate: '15898.00000000',
+        spreadBps: 30,
+        status: 'QUOTED',
+        expiresAt: new Date(Date.now() + 30_000),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ] as never)
+  })
+
+  it('GET /v1/otc → 200 with array of orders', async () => {
+    const res = await server.inject({ method: 'GET', url: '/v1/otc', headers: authHeaders() })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(Array.isArray(body.data)).toBe(true)
+    expect(body.data.length).toBeGreaterThan(0)
+    expect(body.data[0].status).toBe('QUOTED')
+  })
+
+  it('GET /v1/otc?status=QUOTED → 200 filtered list', async () => {
+    const res = await server.inject({ method: 'GET', url: '/v1/otc?status=QUOTED', headers: authHeaders() })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+  })
+})
+
+// ─── Authenticated: POST /v1/offramp/verify-account ──────────────────────────
+
+describe('Authenticated: POST /v1/offramp/verify-account', () => {
+  beforeEach(async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
+  })
+
+  it('POST /v1/offramp/verify-account → 200 with valid + accountName', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/v1/offramp/verify-account',
+      payload: { bankCode: 'BCA', accountNumber: '1234567890' },
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(body.data.valid).toBe(true)
+    expect(body.data.accountName).toBeTruthy()
+  })
+})
+
+// ─── Authenticated: POST /v1/kyc/tier3 ───────────────────────────────────────
+
+describe('Authenticated: POST /v1/kyc/tier3', () => {
+  beforeEach(async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
+    vi.mocked(prisma.kycRecord.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.kycRecord.create).mockResolvedValue({
+      id: 'kyc_tier3_001',
+      customerId: TEST_CUSTOMER_ID,
+      tier: 'TIER3',
+      status: 'PENDING',
+      npwp: '123456789012345',
+      companyName: 'PT Besar Sekali',
+      notes: 'Manual review required. UBOs: John Doe',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as never)
+  })
+
+  it('POST /v1/kyc/tier3 → 202 PENDING', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/v1/kyc/tier3',
+      payload: {
+        companyName: 'PT Besar Sekali',
+        npwp: '123456789012345',
+        uboNames: ['John Doe'],
+      },
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(202)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(body.data.status).toBe('PENDING')
+    expect(body.data.recordId).toBeTruthy()
+    expect(body.data.message).toMatch(/review/i)
+  })
+
+  it('POST /v1/kyc/tier3 duplicate submission → 409', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.kycRecord.findFirst).mockResolvedValue({
+      id: 'kyc_tier3_001',
+      tier: 'TIER3',
+      status: 'PENDING',
+    } as never)
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/v1/kyc/tier3',
+      payload: {
+        companyName: 'PT Besar Sekali',
+        npwp: '123456789012345',
+        uboNames: ['John Doe'],
+      },
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(409)
+    const body = JSON.parse(res.body)
+    expect(body.error.code).toBe('ALREADY_SUBMITTED')
   })
 })
 

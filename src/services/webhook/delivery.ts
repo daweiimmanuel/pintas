@@ -22,7 +22,7 @@ export async function dispatchWebhookEvent(
   customerId: string,
   event: WebhookEvent,
   data: Record<string, unknown>,
-  opts?: { onrampOrderId?: string; offrampOrderId?: string }
+  opts?: { onrampOrderId?: string; offrampOrderId?: string; remittanceOrderId?: string; otcOrderId?: string }
 ): Promise<void> {
   const webhooks = await prisma.webhook.findMany({
     where: { customerId, events: { has: event }, isActive: true },
@@ -51,6 +51,8 @@ export async function dispatchWebhookEvent(
         attempt: 1,
         onrampOrderId: opts?.onrampOrderId,
         offrampOrderId: opts?.offrampOrderId,
+        remittanceOrderId: opts?.remittanceOrderId,
+        otcOrderId: opts?.otcOrderId,
       })
     )
   )
@@ -89,6 +91,8 @@ export async function deliverWebhook(params: {
   deliveryId?: string
   onrampOrderId?: string
   offrampOrderId?: string
+  remittanceOrderId?: string
+  otcOrderId?: string
 }): Promise<void> {
   const { webhookId, url, event, payload, payloadStr, signature, attempt } = params
 
@@ -102,6 +106,8 @@ export async function deliverWebhook(params: {
           payload: payload as object,
           onrampOrderId: params.onrampOrderId,
           offrampOrderId: params.offrampOrderId,
+          remittanceOrderId: params.remittanceOrderId,
+          otcOrderId: params.otcOrderId,
         },
       })
 
