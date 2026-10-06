@@ -1,5 +1,16 @@
 # syntax=docker/dockerfile:1
 
+# ── Web frontend build ────────────────────────────────────────────────────────
+FROM node:22-alpine AS web-builder
+
+WORKDIR /web
+
+COPY web/package*.json ./
+RUN npm ci
+
+COPY web/ ./
+RUN npm run build
+
 # ── Build stage ───────────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
 
@@ -34,6 +45,7 @@ RUN npm ci --omit=dev
 RUN npx prisma generate
 
 COPY --from=builder /app/dist ./dist/
+COPY --from=web-builder /web/dist ./web/dist/
 
 EXPOSE 3000
 
