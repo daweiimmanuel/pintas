@@ -399,6 +399,8 @@ model Exporter {
   payoutAccounts   PayoutAccount[]
   buyers           Buyer[]
   quotes           Quote[]
+  orders           SettlementOrder[]
+  webhookEndpoints WebhookEndpoint[]
 }
 
 model PayoutAccount {
@@ -416,14 +418,15 @@ model PayoutAccount {
 }
 
 model Buyer {
-  id         String   @id @default(cuid())
+  id         String            @id @default(cuid())
   exporterId String
-  exporter   Exporter @relation(fields: [exporterId], references: [id])
+  exporter   Exporter          @relation(fields: [exporterId], references: [id])
   legalName  String
   country    String
   email      String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  orders     SettlementOrder[]
 }
 
 model Quote {
@@ -437,6 +440,222 @@ model Quote {
   expiresAt          DateTime
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  orders             SettlementOrder[]
+}
+
+// ─── Settlement State Machine ─────────────────────────────────────────────────
+
+enum SettlementStatus {
+  DRAFT
+  AWAITING_FUNDS
+  FUNDED
+  MINTING
+  MINTED
+  IN_TRANSIT
+  ARRIVED
+  REDEEMING
+  REDEEMED
+  PAYING_OUT
+  PAID_OUT
+  RECONCILED
+  EXPIRED
+  CANCELLED
+  MINT_FAILED
+  TRANSFER_FAILED
+  REDEEM_FAILED
+  PAYOUT_FAILED
+  REFUND_PENDING
+  REFUNDED
+  MANUAL_REVIEW
+}
+
+model SettlementOrder {
+  id                   String           @id @default(cuid())
+  exporterId           String
+  exporter             Exporter         @relation(fields: [exporterId], references: [id])
+  buyerId              String
+  buyer                Buyer            @relation(fields: [buyerId], references: [id])
+  quoteId              String
+  quote                Quote            @relation(fields: [quoteId], references: [id])
+  invoiceRef           String
+  invoiceAmountCents   BigInt
+  fundedAmountCents    BigInt           @default(0)
+  feeCents             BigInt
+  netPayoutCents       BigInt
+  status               SettlementStatus @default(DRAFT)
+  statusReason         String?
+  expiresAt            DateTime
+  version              Int              @default(1)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  collectionInstruction CollectionInstruction?
+  incomingPayments     IncomingPayment[]
+  rampOperations       RampOperation[]
+  chainTransfers       ChainTransfer[]
+  payouts              Payout[]
+  refunds              Refund[]
+  events               OrderEvent[]
+  journalEntries       JournalEntry[]
+  @@index([exporterId, status])
+  @@index([createdAt(sort: Desc)])
+}
+
+model CollectionInstruction {
+  id                String          @id @default(cuid())
+  orderId           String          @unique
+  order             SettlementOrder @relation(fields: [orderId], references: [id])
+  provider          String
+  virtualAccountRef String
+  paymentReference  String          @unique
+  bankDetailsJson   Json
+  createdAt         DateTime        @default(now())
+}
+
+model IncomingPayment {
+  id                String           @id @default(cuid())
+  orderId           String?
+  order             SettlementOrder? @relation(fields: [orderId], references: [id])
+  provider          String
+  providerPaymentId String           @unique
+  amountCents       BigInt
+  payerName         String?
+  receivedAt        DateTime
+  matchStatus       String
+  createdAt         DateTime         @default(now())
+}
+
+model RampOperation {
+  id              String          @id @default(cuid())
+  orderId         String
+  order           SettlementOrder @relation(fields: [orderId], references: [id])
+  type            String
+  provider        String
+  providerRef     String          @unique
+  amountMicroUsdc BigInt
+  status          String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model ChainTransfer {
+  id              String          @id @default(cuid())
+  orderId         String
+  order           SettlementOrder @relation(fields: [orderId], references: [id])
+  chain           String
+  fromAddress     String
+  toAddress       String
+  amountMicroUsdc BigInt
+  txHash          String          @unique
+  confirmations   Int             @default(0)
+  status          String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model Payout {
+  id              String          @id @default(cuid())
+  orderId         String
+  order           SettlementOrder @relation(fields: [orderId], references: [id])
+  payoutAccountId String
+  provider        String
+  providerRef     String          @unique
+  amountCents     BigInt
+  status          String
+  failureReason   String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model Refund {
+  id          String          @id @default(cuid())
+  orderId     String
+  order       SettlementOrder @relation(fields: [orderId], references: [id])
+  amountCents BigInt
+  reason      String
+  status      String
+  providerRef String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model OrderEvent {
+  id          String          @id @default(cuid())
+  orderId     String
+  order       SettlementOrder @relation(fields: [orderId], references: [id])
+  fromStatus  String
+  toStatus    String
+  trigger     String
+  payloadJson Json?
+  actor       String
+  createdAt   DateTime        @default(now())
+  @@index([orderId, createdAt(sort: Desc)])
+}
+
+model JournalEntry {
+  id          String          @id @default(cuid())
+  orderId     String
+  order       SettlementOrder @relation(fields: [orderId], references: [id])
+  transition  String
+  description String
+  postedAt    DateTime        @default(now())
+  lines       LedgerLine[]
+}
+
+model LedgerAccount {
+  id    String       @id @default(cuid())
+  code  String       @unique
+  asset String
+  type  String
+  lines LedgerLine[]
+}
+
+model LedgerLine {
+  id              String        @id @default(cuid())
+  journalEntryId  String
+  journalEntry    JournalEntry  @relation(fields: [journalEntryId], references: [id])
+  ledgerAccountId String
+  ledgerAccount   LedgerAccount @relation(fields: [ledgerAccountId], references: [id])
+  asset           String
+  debitMinor      BigInt        @default(0)
+  creditMinor     BigInt        @default(0)
+}
+
+model WebhookEndpoint {
+  id         String           @id @default(cuid())
+  exporterId String
+  exporter   Exporter         @relation(fields: [exporterId], references: [id])
+  url        String
+  secret     String
+  events     String[]
+  active     Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  deliveries WebhookDelivery2[]
+}
+
+model WebhookDelivery2 {
+  id               String          @id @default(cuid())
+  endpointId       String
+  endpoint         WebhookEndpoint @relation(fields: [endpointId], references: [id])
+  eventType        String
+  payloadJson      Json
+  attempt          Int             @default(1)
+  nextAttemptAt    DateTime?
+  status           String
+  lastResponseCode Int?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  @@index([endpointId, status])
+  @@index([nextAttemptAt])
+}
+
+model IdempotencyKey {
+  key          String   @id
+  route        String
+  requestHash  String
+  responseJson Json
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
 }
 
 enum RemittanceStatus {

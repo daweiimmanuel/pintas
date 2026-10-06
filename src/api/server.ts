@@ -21,6 +21,7 @@ import authRoutes from './routes/auth.js'
 import exporterRoutes from '../modules/exporters/routes.js'
 import buyerRoutes from '../modules/buyers/routes.js'
 import quoteRoutes from '../modules/quotes/routes.js'
+import settlementRoutes from '../modules/settlements/routes.js'
 
 export async function buildServer() {
   const fastify = Fastify({
@@ -120,6 +121,7 @@ export async function buildServer() {
       await v1.register(exporterRoutes)
       await v1.register(buyerRoutes)
       await v1.register(quoteRoutes)
+      await v1.register(settlementRoutes)
     },
     { prefix: '/v1' }
   )

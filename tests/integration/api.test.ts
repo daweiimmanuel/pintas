@@ -109,7 +109,47 @@ vi.mock('../../src/db/client.js', () => ({
         pricingVersion: 'v1-example', expiresAt: new Date(Date.now() + 86_400_000), createdAt: new Date(), updatedAt: new Date(),
       }),
       findUnique: vi.fn().mockResolvedValue(null),
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        id: 'q_001', invoiceAmountCents: 1_000_000n, feeCents: 5_000n, netPayoutCents: 995_000n,
+      }),
     },
+    settlementOrder: {
+      create: vi.fn().mockResolvedValue({
+        id: 'so_001', exporterId: 'exp_001', buyerId: 'buy_001', quoteId: 'q_001',
+        invoiceRef: 'INV-2024-001', invoiceAmountCents: 1_000_000n,
+        fundedAmountCents: 0n, feeCents: 5_000n, netPayoutCents: 995_000n,
+        status: 'DRAFT', statusReason: null, expiresAt: new Date(Date.now() + 172_800_000),
+        version: 1, createdAt: new Date(), updatedAt: new Date(),
+      }),
+      findUnique: vi.fn().mockResolvedValue(null),
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        id: 'so_001', status: 'DRAFT', version: 1, invoiceAmountCents: 1_000_000n,
+        feeCents: 5_000n, netPayoutCents: 995_000n, fundedAmountCents: 0n,
+      }),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      update: vi.fn().mockResolvedValue({}),
+    },
+    orderEvent: {
+      create: vi.fn().mockResolvedValue({ id: 'evt_001' }),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    journalEntry: {
+      create: vi.fn().mockResolvedValue({ id: 'je_001' }),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    ledgerAccount: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({ id: 'la_001' }),
+    },
+    ledgerLine: {
+      create: vi.fn().mockResolvedValue({ id: 'll_001' }),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    $transaction: vi.fn().mockImplementation(async (fn: (tx: unknown) => unknown) => {
+      // Pass a minimal tx client that mirrors the prisma mock
+      const { prisma: p } = await import('../../src/db/client.js')
+      return fn(p)
+    }),
     webhook: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn().mockResolvedValue({ id: 'wh_001', customerId: 'cust_test_sprint4' }),
@@ -1199,5 +1239,80 @@ describe('Quotes: GET /v1/quotes/:id', () => {
       headers: { Authorization: 'Bearer test-api-key' },
     })
     expect(res.statusCode).toBe(404)
+  })
+})
+
+// ─── M4: Settlement Orders ────────────────────────────────────────────────────
+
+describe('Settlements: POST /v1/settlements', () => {
+  it('creates a settlement order → 201 with DRAFT status', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.quote.findUniqueOrThrow).mockResolvedValue({
+      id: 'q_001', invoiceAmountCents: 1_000_000n, feeCents: 5_000n, netPayoutCents: 995_000n,
+    } as never)
+    vi.mocked(prisma.settlementOrder.create).mockResolvedValue({
+      id: 'so_001', exporterId: 'exp_001', buyerId: 'buy_001', quoteId: 'q_001',
+      invoiceRef: 'INV-2024-001', invoiceAmountCents: 1_000_000n,
+      fundedAmountCents: 0n, feeCents: 5_000n, netPayoutCents: 995_000n,
+      status: 'DRAFT', statusReason: null, expiresAt: new Date(Date.now() + 172_800_000),
+      version: 1, createdAt: new Date(), updatedAt: new Date(),
+    } as never)
+    const res = await server.inject({
+      method: 'POST', url: '/v1/settlements',
+      payload: { exporterId: 'exp_001', buyerId: 'buy_001', quoteId: 'q_001', invoiceRef: 'INV-2024-001' },
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(body.data.status).toBe('DRAFT')
+    expect(body.data.invoiceAmountUsd).toBe('10000.00')
+    expect(body.data.feeUsd).toBe('50.00')
+    expect(body.data.netPayoutUsd).toBe('9950.00')
+  })
+
+  it('returns 400 for missing required fields', async () => {
+    const res = await server.inject({
+      method: 'POST', url: '/v1/settlements',
+      payload: { exporterId: 'exp_001' },
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(400)
+  })
+})
+
+describe('Settlements: GET /v1/settlements/:id', () => {
+  it('returns 404 for unknown settlement', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.settlementOrder.findUnique).mockResolvedValue(null)
+    const res = await server.inject({
+      method: 'GET', url: '/v1/settlements/unknown_so',
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(404)
+  })
+})
+
+describe('Settlements: POST /v1/settlements/:id/cancel', () => {
+  it('cancels a DRAFT order → 200', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    const draftOrder = {
+      id: 'so_001', status: 'DRAFT', version: 1, invoiceAmountCents: 1_000_000n,
+      feeCents: 5_000n, netPayoutCents: 995_000n, fundedAmountCents: 0n,
+      exporterId: 'exp_001', buyerId: 'buy_001', quoteId: 'q_001',
+      invoiceRef: 'INV-001', statusReason: null,
+      expiresAt: new Date(), createdAt: new Date(), updatedAt: new Date(),
+    }
+    vi.mocked(prisma.settlementOrder.findUniqueOrThrow)
+      .mockResolvedValueOnce(draftOrder as never)                               // load for transition check
+      .mockResolvedValueOnce({ ...draftOrder, status: 'CANCELLED' } as never)  // return after update
+    vi.mocked(prisma.settlementOrder.updateMany).mockResolvedValue({ count: 1 })
+    const res = await server.inject({
+      method: 'POST', url: '/v1/settlements/so_001/cancel',
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.data.status).toBe('CANCELLED')
   })
 })
