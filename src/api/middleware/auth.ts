@@ -36,7 +36,13 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
     // Skip auth for health check and callback routes
     const { url } = request
-    if (url === '/health' || url.startsWith('/v1/callbacks/') || url.startsWith('/docs') || url.startsWith('/documentation')) return
+    if (
+      url === '/health' ||
+      url.startsWith('/v1/callbacks/') ||
+      url.startsWith('/docs') ||
+      url.startsWith('/documentation') ||
+      url === '/v1/auth/register'
+    ) return
 
     const authHeader = request.headers.authorization
     if (!authHeader?.startsWith('Bearer ')) {

@@ -4,7 +4,22 @@ import { prisma } from '../../db/client.js'
 
 const transactionsRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /v1/transactions — list onramp + offramp orders
-  fastify.get('/transactions', async (req, reply) => {
+  fastify.get('/transactions', {
+    schema: {
+      tags: ['transactions'],
+      summary: 'List all transactions (on-ramp, off-ramp, remittance) with optional filter',
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          type: { type: 'string', enum: ['onramp', 'offramp', 'remittance', 'all'], default: 'all' },
+          status: { type: 'string', description: 'Filter by order status' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+          before: { type: 'string', description: 'Cursor for pagination (last order ID from previous page)' },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       type: z.enum(['onramp', 'offramp', 'remittance', 'all']).default('all'),
       status: z.string().optional(),

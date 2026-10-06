@@ -6,7 +6,23 @@ import { dispatchWebhookEvent } from '../../services/webhook/delivery.js'
 
 const kycRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /v1/kyc/tier1 — individual identity verification (NIK + selfie)
-  fastify.post('/kyc/tier1', async (req, reply) => {
+  fastify.post('/kyc/tier1', {
+    schema: {
+      tags: ['kyc'],
+      summary: 'Tier 1 KYC — individual identity verification (NIK + selfie)',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['nik', 'fullName', 'dateOfBirth'],
+        properties: {
+          nik: { type: 'string', minLength: 16, maxLength: 16, description: '16-digit Indonesian national ID number' },
+          fullName: { type: 'string', minLength: 2, maxLength: 100 },
+          dateOfBirth: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Date of birth (YYYY-MM-DD)' },
+          selfieBase64: { type: 'string', description: 'Base64-encoded selfie image (optional)' },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       nik: z.string().length(16),
       fullName: z.string().min(2).max(100),
@@ -76,7 +92,24 @@ const kycRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // POST /v1/kyc/tier2 — business verification (NPWP + NIB)
-  fastify.post('/kyc/tier2', async (req, reply) => {
+  fastify.post('/kyc/tier2', {
+    schema: {
+      tags: ['kyc'],
+      summary: 'Tier 2 KYC — business verification (NPWP + NIB)',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['npwp', 'companyName', 'nibNumber', 'directorNik', 'directorName'],
+        properties: {
+          npwp: { type: 'string', minLength: 15, maxLength: 20, description: 'Indonesian tax ID (NPWP)' },
+          companyName: { type: 'string', minLength: 2, maxLength: 200 },
+          nibNumber: { type: 'string', minLength: 10, maxLength: 20, description: 'Business registration number (NIB)' },
+          directorNik: { type: 'string', minLength: 16, maxLength: 16, description: 'Director NIK' },
+          directorName: { type: 'string', minLength: 2, maxLength: 100 },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       npwp: z.string().min(15).max(20),
       companyName: z.string().min(2).max(200),
@@ -170,7 +203,7 @@ const kycRoutes: FastifyPluginAsync = async (fastify) => {
       })
     }
 
-    const result = verifyTier3(body)
+    const result = await Promise.resolve(verifyTier3(body))
 
     const record = await prisma.kycRecord.create({
       data: {

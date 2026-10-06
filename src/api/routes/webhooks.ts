@@ -15,7 +15,31 @@ const VALID_EVENTS: readonly WebhookEvent[] = [
 
 const webhookRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /v1/webhooks
-  fastify.post('/webhooks', async (req, reply) => {
+  fastify.post('/webhooks', {
+    schema: {
+      tags: ['webhooks'],
+      summary: 'Subscribe to webhook events',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['url', 'events'],
+        properties: {
+          url: { type: 'string', format: 'uri', description: 'HTTPS endpoint to receive events' },
+          events: {
+            type: 'array',
+            minItems: 1,
+            items: { type: 'string', enum: [
+              'onramp.created', 'onramp.funded', 'onramp.completed', 'onramp.failed',
+              'offramp.created', 'offramp.funded', 'offramp.completed', 'offramp.failed',
+              'kyc.approved', 'kyc.rejected',
+              'remittance.created', 'remittance.funded', 'remittance.completed', 'remittance.failed', 'remittance.expired',
+              'otc.accepted', 'otc.settled', 'otc.failed', 'otc.expired',
+            ]},
+          },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       url: z.string().url().startsWith('https://'),
       events: z.array(z.enum(VALID_EVENTS as unknown as [string, ...string[]])).min(1),

@@ -78,6 +78,8 @@ vi.mock('../../src/db/client.js', () => ({
     customer: {
       update: vi.fn().mockResolvedValue({}),
       findUniqueOrThrow: vi.fn().mockResolvedValue({ id: 'cust_test_sprint4', name: 'Test Corp', email: 'test@testcorp.io' }),
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({ id: 'cust_new_001', name: 'New Corp', email: 'new@corp.io', kybStatus: 'PENDING', tier: 'TIER1', createdAt: new Date(), updatedAt: new Date() }),
     },
     remittanceOrder: {
       findFirst: vi.fn().mockResolvedValue(null),
@@ -1099,5 +1101,89 @@ describe('AML: high-risk address blocks stablecoin dispatch', () => {
     await expect(
       sendStablecoin({ chain: 'POLYGON' as never, to: '0xbad', amount: '100', stablecoin: 'USDT' as never })
     ).rejects.toMatchObject({ statusCode: 403 })
+  })
+})
+
+// ─── Auth: POST /v1/auth/register ────────────────────────────────────────────
+
+describe('Auth: POST /v1/auth/register', () => {
+  const MASTER_KEY = 'pintas-test-master-key-sprint8-32charlong!'
+
+  beforeEach(async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.customer.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.customer.create).mockResolvedValue({
+      id: 'cust_new_001',
+      name: 'PT Maju Jaya',
+      email: 'ops@majujaya.co.id',
+      kybStatus: 'PENDING',
+      tier: 'TIER1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as never)
+    vi.mocked(prisma.apiKey.create).mockResolvedValue({
+      id: 'key_new_001',
+      keyHash: 'hash',
+      customerId: 'cust_new_001',
+      name: 'Default Key',
+      scopes: ['*'],
+      ipAllowlist: [],
+      revokedAt: null,
+      expiresAt: null,
+      lastUsedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as never)
+  })
+
+  it('POST /v1/auth/register with valid master key → 201 with API key', async () => {
+    // Use the actual MASTER_API_KEY_SECRET from config (test env uses process.env or default)
+    const res = await server.inject({
+      method: 'POST',
+      url: '/v1/auth/register',
+      payload: { name: 'PT Maju Jaya', email: 'ops@majujaya.co.id' },
+      headers: { Authorization: `Bearer ${process.env.MASTER_API_KEY_SECRET ?? MASTER_KEY}` },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(body.data.apiKey.key).toMatch(/^pk_/)
+  })
+
+  it('POST /v1/auth/register with wrong master key → 401', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/v1/auth/register',
+      payload: { name: 'PT Test', email: 'test@test.co.id' },
+      headers: { Authorization: 'Bearer wrong-key' },
+    })
+    expect(res.statusCode).toBe(401)
+  })
+
+  it('POST /v1/auth/register with duplicate email → 409', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.customer.findFirst).mockResolvedValue({
+      id: 'cust_existing',
+      email: 'ops@majujaya.co.id',
+    } as never)
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/v1/auth/register',
+      payload: { name: 'PT Maju Jaya', email: 'ops@majujaya.co.id' },
+      headers: { Authorization: `Bearer ${process.env.MASTER_API_KEY_SECRET ?? MASTER_KEY}` },
+    })
+    expect(res.statusCode).toBe(409)
+    const body = JSON.parse(res.body)
+    expect(body.error.code).toBe('EMAIL_TAKEN')
+  })
+
+  it('POST /v1/auth/register without auth header → 401', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/v1/auth/register',
+      payload: { name: 'PT Test', email: 'test@test.co.id' },
+    })
+    expect(res.statusCode).toBe(401)
   })
 })

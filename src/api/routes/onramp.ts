@@ -7,7 +7,25 @@ import { prisma } from '../../db/client.js'
 
 const onrampRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /v1/onramp — create on-ramp order (IDR → stablecoin)
-  fastify.post('/onramp', async (req, reply) => {
+  fastify.post('/onramp', {
+    schema: {
+      tags: ['onramp'],
+      summary: 'Create an IDR → stablecoin on-ramp order (returns a virtual account for payment)',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['amountIdr', 'destinationAddress'],
+        properties: {
+          amountIdr: { type: 'string', description: 'IDR amount (minimum 10,000)' },
+          stablecoin: { type: 'string', enum: ['USDT', 'USDC'], default: 'USDT' },
+          chain: { type: 'string', enum: ['POLYGON', 'TRON', 'STELLAR', 'ETHEREUM'], default: 'POLYGON' },
+          destinationAddress: { type: 'string', minLength: 10, description: 'Wallet address to receive stablecoin' },
+          referenceId: { type: 'string', maxLength: 64 },
+          metadata: { type: 'object', additionalProperties: true },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       amountIdr: z.string().regex(/^\d+(\.\d+)?$/).refine(
         (v) => parseFloat(v) >= 10_000,

@@ -12,7 +12,30 @@ const EWALLET_CODES = ['GOPAY', 'OVO', 'DANA', 'SHOPEEPAY', 'LINKAJA'] as const
 
 const offrampRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /v1/offramp — create off-ramp order (stablecoin → IDR)
-  fastify.post('/offramp', async (req, reply) => {
+  fastify.post('/offramp', {
+    schema: {
+      tags: ['offramp'],
+      summary: 'Create a stablecoin → IDR off-ramp order (bank transfer or e-wallet)',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['amountStablecoin', 'disbursementType'],
+        properties: {
+          amountStablecoin: { type: 'string', description: 'Stablecoin amount (minimum 1)' },
+          stablecoin: { type: 'string', enum: ['USDT', 'USDC'], default: 'USDT' },
+          chain: { type: 'string', enum: ['POLYGON', 'TRON', 'STELLAR', 'ETHEREUM'], default: 'POLYGON' },
+          disbursementType: { type: 'string', enum: ['BANK_TRANSFER', 'EWALLET'], description: 'Payout method' },
+          bankCode: { type: 'string', description: 'Required for BANK_TRANSFER (e.g. BCA, MANDIRI)' },
+          accountNumber: { type: 'string', description: 'Required for BANK_TRANSFER' },
+          accountName: { type: 'string', description: 'Required for BANK_TRANSFER' },
+          ewalletCode: { type: 'string', enum: ['GOPAY', 'OVO', 'DANA', 'SHOPEEPAY', 'LINKAJA'], description: 'Required for EWALLET' },
+          ewalletPhone: { type: 'string', description: 'Required for EWALLET (format: 08xxxxxxxxxx)' },
+          referenceId: { type: 'string', maxLength: 64 },
+          metadata: { type: 'object', additionalProperties: true },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const bankSchema = z.object({
       amountStablecoin: z.string().regex(/^\d+(\.\d+)?$/).refine(
         (v) => parseFloat(v) >= 1,

@@ -5,7 +5,28 @@ import { prisma } from '../../db/client.js'
 
 const otcRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /v1/otc/quote — request a locked OTC quote (min IDR 75M)
-  fastify.post('/otc/quote', async (req, reply) => {
+  fastify.post('/otc/quote', {
+    schema: {
+      tags: ['otc'],
+      summary: 'Request a locked OTC quote (minimum IDR 75M)',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['side', 'amountIdr'],
+        properties: {
+          side: { type: 'string', enum: ['BUY', 'SELL'], description: 'BUY = IDR → stablecoin, SELL = stablecoin → IDR' },
+          stablecoin: { type: 'string', enum: ['USDT', 'USDC'], default: 'USDT' },
+          chain: { type: 'string', enum: ['POLYGON', 'TRON', 'STELLAR', 'ETHEREUM'], default: 'TRON' },
+          amountIdr: { type: 'string', description: 'IDR notional (minimum 75,000,000)' },
+          spreadBps: { type: 'integer', minimum: 0, maximum: 500, description: 'Custom spread in basis points' },
+          destinationAddress: { type: 'string', description: 'Wallet address for BUY orders' },
+          bankCode: { type: 'string', description: 'Bank code for SELL orders' },
+          accountNumber: { type: 'string' },
+          accountName: { type: 'string' },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       side: z.enum(['BUY', 'SELL']),
       stablecoin: z.enum(['USDT', 'USDC']).default('USDT'),
