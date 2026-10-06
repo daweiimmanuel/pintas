@@ -23,6 +23,7 @@ import buyerRoutes from '../modules/buyers/routes.js'
 import quoteRoutes from '../modules/quotes/routes.js'
 import settlementRoutes from '../modules/settlements/routes.js'
 import sandboxRoutes from './routes/sandbox.js'
+import webhookEndpointRoutes from '../modules/webhooks/routes.js'
 
 export async function buildServer() {
   const fastify = Fastify({
@@ -127,6 +128,7 @@ export async function buildServer() {
       if (config.APP_ENV === 'sandbox' || config.NODE_ENV !== 'production') {
         await v1.register(sandboxRoutes)
       }
+      await v1.register(webhookEndpointRoutes)
     },
     { prefix: '/v1' }
   )
