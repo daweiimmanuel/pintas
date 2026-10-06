@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { quoteCorridor, createRemittanceOrder, getRemittanceOrder, confirmRemittanceReceipt } from '../../services/corridor/index.js'
+import { prisma } from '../../db/client.js'
 
 const SUPPORTED_CORRIDORS = ['MY', 'SA', 'AE', 'SG', 'US'] as const
 
@@ -71,6 +72,48 @@ export async function corridorRoutes(app: FastifyInstance) {
     })
 
     return reply.status(201).send(order)
+  })
+
+  // GET /v1/remittance — list orders with optional status filter + cursor pagination
+  app.get('/remittance', {
+    schema: {
+      tags: ['remittance'],
+      summary: 'List remittance orders',
+      security: [{ bearerAuth: [] }],
+    },
+  }, async (request, reply) => {
+    const schema = z.object({
+      status: z.enum(['PENDING', 'FUNDED', 'PROCESSING', 'COMPLETED', 'FAILED', 'EXPIRED']).optional(),
+      cursor: z.string().optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(20),
+    })
+
+    const query = schema.parse(request.query)
+
+    const orders = await prisma.remittanceOrder.findMany({
+      where: {
+        customerId: request.customerId,
+        ...(query.status ? { status: query.status } : {}),
+      },
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+      take: query.limit,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        corridorCode: true,
+        sourceCurrency: true,
+        amountSource: true,
+        quotedAmountIdr: true,
+        recipientName: true,
+        status: true,
+        expiresAt: true,
+        createdAt: true,
+      },
+    })
+
+    const nextCursor = orders.length === query.limit ? orders[orders.length - 1].id : null
+
+    return reply.send({ success: true, data: orders, nextCursor })
   })
 
   // GET /v1/remittance/:remittanceId

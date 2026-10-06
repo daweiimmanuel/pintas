@@ -248,6 +248,37 @@ function mapSnapResponseCode(code: string): DisbursementResult['status'] {
   return 'processing' // 3xx = in-progress
 }
 
+// ── Disbursement status check (used by poller worker) ─────────────────────────
+
+interface SnapTransferStatusResponse {
+  responseCode: string
+  responseMessage: string
+  data?: { id: string; latestTransactionStatus: string }
+}
+
+export async function checkDisbursementStatus(
+  referenceId: string
+): Promise<'completed' | 'failed' | 'processing'> {
+  if (!config.DURIANPAY_API_KEY || !config.DURIANPAY_CLIENT_KEY) {
+    return 'completed' // sandbox: always resolve
+  }
+
+  const path = `/v1.0/transfer-interbank/${referenceId}`
+  const accessToken = await getAccessToken()
+  const res = await axios.get<SnapTransferStatusResponse>(
+    `${config.DURIANPAY_API_URL}${path}`,
+    {
+      headers: snapHeaders('GET', path, {}, referenceId, accessToken),
+      timeout: 10000,
+    }
+  )
+
+  const txStatus = res.data.data?.latestTransactionStatus
+  if (txStatus === '00') return 'completed'
+  if (txStatus && !['03', '01'].includes(txStatus)) return 'failed'
+  return 'processing'
+}
+
 // ── Webhook signature validation ──────────────────────────────────────────────
 
 // DurianPay SNAP webhooks are signed with HMAC-SHA512 using the API key

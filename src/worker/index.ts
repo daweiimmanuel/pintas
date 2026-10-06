@@ -10,9 +10,12 @@ import { config } from '../config/index.js'
 import { startDepositWatcher } from './deposit-watcher.js'
 import { startWebhookRetryDaemon } from './webhook-retry.js'
 import { startOrderExpiryJob } from './order-expiry.js'
+import { startDisbursementPoller } from './disbursement-poller.js'
 
 async function main() {
   console.log('[worker] Starting Pintas settlement worker…')
+
+  startDisbursementPoller()
 
   const jobs = await Promise.allSettled([
     startDepositWatcher(),

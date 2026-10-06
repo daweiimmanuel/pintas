@@ -70,7 +70,10 @@ vi.mock('../../src/db/client.js', () => ({
     },
     kycRecord: {
       findFirst: vi.fn().mockResolvedValue(null),
+      findUnique: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({ id: 'kyc_001', tier: 'TIER1', status: 'APPROVED', createdAt: new Date(), updatedAt: new Date() }),
+      update: vi.fn().mockResolvedValue({ id: 'kyc_001', tier: 'TIER1', status: 'APPROVED', reviewedAt: new Date(), createdAt: new Date(), updatedAt: new Date() }),
     },
     customer: {
       update: vi.fn().mockResolvedValue({}),
@@ -935,6 +938,133 @@ describe('Authenticated: POST /v1/kyc/tier3', () => {
     expect(res.statusCode).toBe(409)
     const body = JSON.parse(res.body)
     expect(body.error.code).toBe('ALREADY_SUBMITTED')
+  })
+})
+
+// ─── Authenticated: GET /v1/remittance list ───────────────────────────────────
+
+describe('Authenticated: GET /v1/remittance list', () => {
+  beforeEach(async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
+    vi.mocked(prisma.remittanceOrder.findMany).mockResolvedValue([
+      {
+        id: 'remit_001',
+        corridorCode: 'MY',
+        sourceCurrency: 'MYR',
+        amountSource: '1000',
+        quotedAmountIdr: '3417400',
+        recipientName: 'Budi Santoso',
+        status: 'PENDING',
+        expiresAt: new Date(Date.now() + 5 * 60_000),
+        createdAt: new Date(),
+      },
+    ] as never)
+  })
+
+  it('GET /v1/remittance → 200 with array of orders', async () => {
+    const res = await server.inject({ method: 'GET', url: '/v1/remittance', headers: authHeaders() })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(Array.isArray(body.data)).toBe(true)
+    expect(body.data[0].corridorCode).toBe('MY')
+  })
+
+  it('GET /v1/remittance?status=COMPLETED → 200 filtered', async () => {
+    const res = await server.inject({ method: 'GET', url: '/v1/remittance?status=COMPLETED', headers: authHeaders() })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(body).toHaveProperty('nextCursor')
+  })
+})
+
+// ─── Authenticated: Admin KYC Tier 3 review ──────────────────────────────────
+
+describe('Authenticated: admin KYC Tier 3 review', () => {
+  const pendingTier3Record = {
+    id: 'kyc_tier3_001',
+    customerId: TEST_CUSTOMER_ID,
+    tier: 'TIER3',
+    status: 'PENDING',
+    npwp: '123456789012345',
+    companyName: 'PT Besar Sekali',
+    notes: 'Manual review required. UBOs: John Doe',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    reviewedAt: null,
+  }
+
+  beforeEach(async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
+    vi.mocked(prisma.kycRecord.findUnique).mockResolvedValue(pendingTier3Record as never)
+    vi.mocked(prisma.kycRecord.update).mockResolvedValue({ ...pendingTier3Record, status: 'APPROVED', reviewedAt: new Date() } as never)
+    vi.mocked(prisma.customer.update).mockResolvedValue({} as never)
+    vi.mocked(prisma.webhook.findMany).mockResolvedValue([])
+  })
+
+  it('PATCH /v1/admin/kyc/:id/review APPROVED → 200', async () => {
+    const res = await server.inject({
+      method: 'PATCH',
+      url: '/v1/admin/kyc/kyc_tier3_001/review',
+      payload: { decision: 'APPROVED' },
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(body.data.status).toBe('APPROVED')
+  })
+
+  it('PATCH /v1/admin/kyc/:id/review REJECTED → 200', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.kycRecord.update).mockResolvedValue({ ...pendingTier3Record, status: 'REJECTED', reviewedAt: new Date() } as never)
+
+    const res = await server.inject({
+      method: 'PATCH',
+      url: '/v1/admin/kyc/kyc_tier3_001/review',
+      payload: { decision: 'REJECTED', notes: 'Incomplete UBO documentation' },
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(body.data.status).toBe('REJECTED')
+  })
+
+  it('PATCH /v1/admin/kyc/:id/review without admin:write scope → 403', async () => {
+    // mockApiKey has scopes: ['*'] which includes admin:write, so use a restricted key
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue({
+      ...mockApiKey,
+      scopes: ['onramp:write'],
+    } as never)
+
+    const res = await server.inject({
+      method: 'PATCH',
+      url: '/v1/admin/kyc/kyc_tier3_001/review',
+      payload: { decision: 'APPROVED' },
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(403)
+  })
+
+  it('GET /v1/admin/kyc/pending → 200 with pending records list', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.kycRecord.findMany).mockResolvedValue([pendingTier3Record] as never)
+
+    const res = await server.inject({
+      method: 'GET',
+      url: '/v1/admin/kyc/pending',
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(Array.isArray(body.data)).toBe(true)
+    expect(body.data[0].tier).toBe('TIER3')
   })
 })
 
