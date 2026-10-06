@@ -24,6 +24,8 @@ import quoteRoutes from '../modules/quotes/routes.js'
 import settlementRoutes from '../modules/settlements/routes.js'
 import sandboxRoutes from './routes/sandbox.js'
 import webhookEndpointRoutes from '../modules/webhooks/routes.js'
+import providerCallbackRoutes from './routes/provider-callbacks.js'
+import idempotencyPlugin from '../lib/idempotency.js'
 
 export async function buildServer() {
   const fastify = Fastify({
@@ -98,6 +100,7 @@ export async function buildServer() {
   // Middleware plugins
   await fastify.register(errorPlugin)
   await fastify.register(authPlugin)
+  await fastify.register(idempotencyPlugin)
 
   // Health check (no auth required)
   fastify.get('/health', async () => ({
@@ -129,6 +132,7 @@ export async function buildServer() {
         await v1.register(sandboxRoutes)
       }
       await v1.register(webhookEndpointRoutes)
+      await v1.register(providerCallbackRoutes)
     },
     { prefix: '/v1' }
   )

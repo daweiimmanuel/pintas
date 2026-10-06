@@ -159,6 +159,10 @@ vi.mock('../../src/db/client.js', () => ({
         { id: 'del_001', webhookId: 'wh_001', event: 'onramp.created', attempts: 1, succeededAt: new Date(), failedAt: null, createdAt: new Date() },
       ]),
     },
+    idempotencyKey: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+    },
   },
 }))
 
@@ -1085,7 +1089,7 @@ describe('Exporters: POST /v1/exporters', () => {
     const res = await server.inject({
       method: 'POST', url: '/v1/exporters',
       payload: { legalName: 'PT Ekspor Jaya', nib: '1234567890123', npwp: '123456789012345' },
-      headers: { Authorization: 'Bearer test-api-key' },
+      headers: { Authorization: 'Bearer test-api-key', 'Idempotency-Key': 'idem-exp-001' },
     })
     expect(res.statusCode).toBe(201)
     const body = JSON.parse(res.body)
@@ -1148,7 +1152,7 @@ describe('Exporters: POST /v1/exporters/:id/payout-accounts', () => {
         type: 'OFFSHORE_USD', bankName: 'Bank of America',
         accountNumber: '1234506789', accountRef: 'ref_bofa_001',
       },
-      headers: { Authorization: 'Bearer test-api-key' },
+      headers: { Authorization: 'Bearer test-api-key', 'Idempotency-Key': 'idem-pa-001' },
     })
     expect(res.statusCode).toBe(201)
     const body = JSON.parse(res.body)
@@ -1167,7 +1171,7 @@ describe('Buyers: POST /v1/buyers', () => {
     const res = await server.inject({
       method: 'POST', url: '/v1/buyers',
       payload: { exporterId: 'exp_001', legalName: 'Acme Corp', country: 'US', email: 'ap@acme.com' },
-      headers: { Authorization: 'Bearer test-api-key' },
+      headers: { Authorization: 'Bearer test-api-key', 'Idempotency-Key': 'idem-buy-001' },
     })
     expect(res.statusCode).toBe(201)
     const body = JSON.parse(res.body)
@@ -1199,7 +1203,7 @@ describe('Quotes: POST /v1/quotes', () => {
     const res = await server.inject({
       method: 'POST', url: '/v1/quotes',
       payload: { exporterId: 'exp_001', invoiceAmountUsd: '10000.00' },
-      headers: { Authorization: 'Bearer test-api-key' },
+      headers: { Authorization: 'Bearer test-api-key', 'Idempotency-Key': 'idem-q-001' },
     })
     expect(res.statusCode).toBe(201)
     const body = JSON.parse(res.body)
@@ -1260,7 +1264,7 @@ describe('Settlements: POST /v1/settlements', () => {
     const res = await server.inject({
       method: 'POST', url: '/v1/settlements',
       payload: { exporterId: 'exp_001', buyerId: 'buy_001', quoteId: 'q_001', invoiceRef: 'INV-2024-001' },
-      headers: { Authorization: 'Bearer test-api-key' },
+      headers: { Authorization: 'Bearer test-api-key', 'Idempotency-Key': 'idem-so-001' },
     })
     expect(res.statusCode).toBe(201)
     const body = JSON.parse(res.body)
