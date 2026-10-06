@@ -102,6 +102,14 @@ vi.mock('../../src/db/client.js', () => ({
       findUnique: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
     },
+    quote: {
+      create: vi.fn().mockResolvedValue({
+        id: 'q_001', exporterId: 'exp_001',
+        invoiceAmountCents: 1_000_000n, feeCents: 5_000n, netPayoutCents: 995_000n,
+        pricingVersion: 'v1-example', expiresAt: new Date(Date.now() + 86_400_000), createdAt: new Date(), updatedAt: new Date(),
+      }),
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     webhook: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn().mockResolvedValue({ id: 'wh_001', customerId: 'cust_test_sprint4' }),
@@ -1134,5 +1142,62 @@ describe('Buyers: POST /v1/buyers', () => {
       headers: { Authorization: 'Bearer test-api-key' },
     })
     expect(res.statusCode).toBe(400)
+  })
+})
+
+// ─── M3: Quotes and Pricing ───────────────────────────────────────────────────
+
+describe('Quotes: POST /v1/quotes', () => {
+  it('creates a quote for $10,000 → fee $50, net $9,950', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.quote.create).mockResolvedValue({
+      id: 'q_001', exporterId: 'exp_001',
+      invoiceAmountCents: 1_000_000n, feeCents: 5_000n, netPayoutCents: 995_000n,
+      pricingVersion: 'v1-example',
+      expiresAt: new Date(Date.now() + 86_400_000), createdAt: new Date(), updatedAt: new Date(),
+    } as never)
+    const res = await server.inject({
+      method: 'POST', url: '/v1/quotes',
+      payload: { exporterId: 'exp_001', invoiceAmountUsd: '10000.00' },
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(body.data.invoiceAmountUsd).toBe('10000.00')
+    expect(body.data.feeUsd).toBe('50.00')
+    expect(body.data.netPayoutUsd).toBe('9950.00')
+    expect(body.data.pricingVersion).toBe('v1-example')
+    expect(body.data).toHaveProperty('expiresAt')
+  })
+
+  it('rejects zero amount → 400', async () => {
+    const res = await server.inject({
+      method: 'POST', url: '/v1/quotes',
+      payload: { exporterId: 'exp_001', invoiceAmountUsd: '0.00' },
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(400)
+  })
+
+  it('rejects non-numeric amount → 400', async () => {
+    const res = await server.inject({
+      method: 'POST', url: '/v1/quotes',
+      payload: { exporterId: 'exp_001', invoiceAmountUsd: 'abc' },
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(400)
+  })
+})
+
+describe('Quotes: GET /v1/quotes/:id', () => {
+  it('returns 404 for unknown quote', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.quote.findUnique).mockResolvedValue(null)
+    const res = await server.inject({
+      method: 'GET', url: '/v1/quotes/unknown_q',
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(404)
   })
 })
