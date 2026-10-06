@@ -12,13 +12,20 @@ import offrampRoutes from './routes/offramp.js'
 import transactionsRoutes from './routes/transactions.js'
 import kycRoutes from './routes/kyc.js'
 import webhookRoutes from './routes/webhooks.js'
-import { corridorRoutes } from './routes/corridor.js'
 import otcRoutes from './routes/otc.js'
 import walletsRoutes from './routes/wallets.js'
 import apiKeysRoutes from './routes/api-keys.js'
 import meRoutes from './routes/me.js'
 import adminRoutes from './routes/admin.js'
 import authRoutes from './routes/auth.js'
+import exporterRoutes from '../modules/exporters/routes.js'
+import buyerRoutes from '../modules/buyers/routes.js'
+import quoteRoutes from '../modules/quotes/routes.js'
+import settlementRoutes from '../modules/settlements/routes.js'
+import sandboxRoutes from './routes/sandbox.js'
+import webhookEndpointRoutes from '../modules/webhooks/routes.js'
+import providerCallbackRoutes from './routes/provider-callbacks.js'
+import idempotencyPlugin from '../lib/idempotency.js'
 
 export async function buildServer() {
   const fastify = Fastify({
@@ -47,7 +54,6 @@ export async function buildServer() {
       { name: 'rates', description: 'Exchange rates and quotes' },
         { name: 'onramp', description: 'IDR → stablecoin' },
         { name: 'offramp', description: 'Stablecoin → IDR' },
-        { name: 'remittance', description: 'Cross-border remittance' },
         { name: 'otc', description: 'OTC desk (min IDR 75M)' },
         { name: 'kyc', description: 'Identity verification' },
         { name: 'wallets', description: 'Custody wallet addresses' },
@@ -56,6 +62,9 @@ export async function buildServer() {
         { name: 'transactions', description: 'Unified transaction history' },
         { name: 'me', description: 'Customer profile' },
         { name: 'admin', description: 'Internal admin operations (requires admin:write scope)' },
+        { name: 'exporters', description: 'Exporter settlement — exporters, buyers, payout accounts' },
+        { name: 'settlements', description: 'Exporter settlement orders and state machine' },
+        { name: 'sandbox', description: 'Sandbox simulation endpoints (sandbox env only)' },
       ],
       components: {
         securitySchemes: {
@@ -91,6 +100,7 @@ export async function buildServer() {
   // Middleware plugins
   await fastify.register(errorPlugin)
   await fastify.register(authPlugin)
+  await fastify.register(idempotencyPlugin)
 
   // Health check (no auth required)
   fastify.get('/health', async () => ({
@@ -108,13 +118,21 @@ export async function buildServer() {
       await v1.register(transactionsRoutes)
       await v1.register(kycRoutes)
       await v1.register(webhookRoutes)
-      await v1.register(corridorRoutes)
       await v1.register(otcRoutes)
       await v1.register(walletsRoutes)
       await v1.register(apiKeysRoutes)
       await v1.register(meRoutes)
       await v1.register(authRoutes)
       await v1.register(adminRoutes)
+      await v1.register(exporterRoutes)
+      await v1.register(buyerRoutes)
+      await v1.register(quoteRoutes)
+      await v1.register(settlementRoutes)
+      if (config.APP_ENV === 'sandbox' || config.NODE_ENV !== 'production') {
+        await v1.register(sandboxRoutes)
+      }
+      await v1.register(webhookEndpointRoutes)
+      await v1.register(providerCallbackRoutes)
     },
     { prefix: '/v1' }
   )
