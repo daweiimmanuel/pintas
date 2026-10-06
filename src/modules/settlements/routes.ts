@@ -4,6 +4,29 @@ import * as service from './service.js'
 import { transition, InvalidTransitionError } from './state-machine.js'
 
 const settlementRoutes: FastifyPluginAsync = async (fastify) => {
+  // GET /v1/settlements?exporterId=&limit=
+  fastify.get('/settlements', {
+    schema: {
+      tags: ['settlements'],
+      summary: 'List settlement orders for an exporter',
+      querystring: {
+        type: 'object',
+        required: ['exporterId'],
+        properties: {
+          exporterId: { type: 'string' },
+          limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const { exporterId, limit } = z.object({
+      exporterId: z.string(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+    }).parse(req.query)
+    const orders = await service.listSettlements(exporterId, limit)
+    return reply.send({ success: true, data: orders })
+  })
+
   // POST /v1/settlements — create from a quote
   fastify.post('/settlements', {
     schema: {
