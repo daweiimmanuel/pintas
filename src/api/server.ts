@@ -12,7 +12,6 @@ import offrampRoutes from './routes/offramp.js'
 import transactionsRoutes from './routes/transactions.js'
 import kycRoutes from './routes/kyc.js'
 import webhookRoutes from './routes/webhooks.js'
-import { corridorRoutes } from './routes/corridor.js'
 import otcRoutes from './routes/otc.js'
 import walletsRoutes from './routes/wallets.js'
 import apiKeysRoutes from './routes/api-keys.js'
@@ -47,7 +46,6 @@ export async function buildServer() {
       { name: 'rates', description: 'Exchange rates and quotes' },
         { name: 'onramp', description: 'IDR → stablecoin' },
         { name: 'offramp', description: 'Stablecoin → IDR' },
-        { name: 'remittance', description: 'Cross-border remittance' },
         { name: 'otc', description: 'OTC desk (min IDR 75M)' },
         { name: 'kyc', description: 'Identity verification' },
         { name: 'wallets', description: 'Custody wallet addresses' },
@@ -108,7 +106,6 @@ export async function buildServer() {
       await v1.register(transactionsRoutes)
       await v1.register(kycRoutes)
       await v1.register(webhookRoutes)
-      await v1.register(corridorRoutes)
       await v1.register(otcRoutes)
       await v1.register(walletsRoutes)
       await v1.register(apiKeysRoutes)

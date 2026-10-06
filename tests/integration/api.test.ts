@@ -524,27 +524,6 @@ describe('Authenticated: OTC', () => {
   })
 })
 
-// ─── Authenticated: remittance quote ─────────────────────────────────────────
-
-describe('Authenticated: remittance quote', () => {
-  beforeEach(async () => {
-    const { prisma } = await import('../../src/db/client.js')
-    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
-  })
-
-  it('GET /v1/remittance/quote?corridorCode=MY&amountSource=1000 → 200 with IDR amount', async () => {
-    const res = await server.inject({
-      method: 'GET',
-      url: '/v1/remittance/quote?corridorCode=MY&amountSource=1000',
-      headers: authHeaders(),
-    })
-    expect(res.statusCode).toBe(200)
-    const body = JSON.parse(res.body)
-    expect(Number(body.quotedAmountIdr)).toBeGreaterThan(0)
-    expect(body.fxRate).toBeTruthy()
-  })
-})
-
 // ─── Authenticated: customer profile (/v1/me) ────────────────────────────────
 
 describe('Authenticated: /v1/me', () => {
@@ -696,124 +675,6 @@ describe('Authenticated: webhook delivery history', () => {
   })
 })
 
-// ─── Authenticated: POST /v1/remittance ───────────────────────────────────────
-
-describe('Authenticated: POST /v1/remittance', () => {
-  beforeEach(async () => {
-    const { prisma } = await import('../../src/db/client.js')
-    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
-    vi.mocked(prisma.remittanceOrder.create).mockResolvedValue({
-      id: 'remit_001',
-      customerId: TEST_CUSTOMER_ID,
-      corridorCode: 'MY',
-      sourceCurrency: 'MYR',
-      amountSource: '1000',
-      feeSource: '2.00',
-      netAmountSource: '998.00',
-      fxRate: '3500.00',
-      spreadBps: 80,
-      quotedAmountIdr: '3417400',
-      recipientName: 'Budi Santoso',
-      recipientBank: 'BCA',
-      recipientAccountNumber: '1234567890',
-      recipientEwallet: null,
-      recipientPhone: null,
-      status: 'PENDING',
-      expiresAt: new Date(Date.now() + 5 * 60_000),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    } as never)
-    vi.mocked(prisma.webhook.findMany).mockResolvedValue([])
-  })
-
-  it('POST /v1/remittance → 201 with quotedAmountIdr and corridorCode', async () => {
-    const res = await server.inject({
-      method: 'POST',
-      url: '/v1/remittance',
-      payload: {
-        corridorCode: 'MY',
-        sourceCurrency: 'MYR',
-        amountSource: '1000',
-        recipientName: 'Budi Santoso',
-        recipientBank: 'BCA',
-        recipientAccountNumber: '1234567890',
-      },
-      headers: authHeaders(),
-    })
-    expect(res.statusCode).toBe(201)
-    const body = JSON.parse(res.body)
-    // corridor route returns the order directly (not wrapped in { success, data })
-    expect(body.corridorCode).toBe('MY')
-    expect(Number(body.quotedAmountIdr)).toBeGreaterThan(0)
-    expect(body.status).toBe('PENDING')
-  })
-})
-
-// ─── Authenticated: POST /v1/remittance/:id/confirm ───────────────────────────
-
-describe('Authenticated: POST /v1/remittance/:id/confirm', () => {
-  const remittanceRecord = {
-    id: 'remit_001',
-    customerId: TEST_CUSTOMER_ID,
-    corridorCode: 'MY',
-    sourceCurrency: 'MYR',
-    amountSource: '1000',
-    feeSource: '2.00',
-    netAmountSource: '998.00',
-    fxRate: '3500.00',
-    spreadBps: 80,
-    quotedAmountIdr: '3417400',
-    recipientName: 'Budi Santoso',
-    recipientBank: 'BCA',
-    recipientAccountNumber: '1234567890',
-    recipientEwallet: null,
-    recipientPhone: null,
-    status: 'PENDING',
-    externalRef: null,
-    expiresAt: new Date(Date.now() + 5 * 60_000),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }
-
-  beforeEach(async () => {
-    const { prisma } = await import('../../src/db/client.js')
-    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
-    // getRemittanceOrder uses findFirst; confirmRemittanceReceipt uses findUniqueOrThrow
-    vi.mocked(prisma.remittanceOrder.findFirst).mockResolvedValue(remittanceRecord as never)
-    vi.mocked(prisma.remittanceOrder.findUniqueOrThrow).mockResolvedValue(remittanceRecord as never)
-    vi.mocked(prisma.remittanceOrder.update).mockResolvedValue({ ...remittanceRecord, status: 'FUNDED' } as never)
-    vi.mocked(prisma.webhook.findMany).mockResolvedValue([])
-  })
-
-  it('POST /v1/remittance/:id/confirm happy path → 200 order COMPLETED', async () => {
-    const { disburseToBankAccount } = await import('../../src/services/disbursement/index.js')
-    vi.mocked(disburseToBankAccount).mockResolvedValue({ disbursementId: 'disb_001' } as never)
-
-    const res = await server.inject({
-      method: 'POST',
-      url: '/v1/remittance/remit_001/confirm',
-      payload: { receivedAmountSource: '1000', externalRef: 'PARTNER-REF-001' },
-      headers: authHeaders(),
-    })
-    expect(res.statusCode).toBe(200)
-    const body = JSON.parse(res.body)
-    expect(body.success).toBe(true)
-  })
-
-  it('POST /v1/remittance/:id/confirm disbursement failure → 500', async () => {
-    const { disburseToBankAccount } = await import('../../src/services/disbursement/index.js')
-    vi.mocked(disburseToBankAccount).mockRejectedValue(new Error('Bank unreachable'))
-
-    const res = await server.inject({
-      method: 'POST',
-      url: '/v1/remittance/remit_001/confirm',
-      payload: { receivedAmountSource: '1000', externalRef: 'PARTNER-REF-002' },
-      headers: authHeaders(),
-    })
-    expect(res.statusCode).toBeGreaterThanOrEqual(500)
-  })
-})
-
 // ─── Authenticated: GET /v1/otc list ─────────────────────────────────────────
 
 describe('Authenticated: GET /v1/otc list', () => {
@@ -940,45 +801,6 @@ describe('Authenticated: POST /v1/kyc/tier3', () => {
     expect(res.statusCode).toBe(409)
     const body = JSON.parse(res.body)
     expect(body.error.code).toBe('ALREADY_SUBMITTED')
-  })
-})
-
-// ─── Authenticated: GET /v1/remittance list ───────────────────────────────────
-
-describe('Authenticated: GET /v1/remittance list', () => {
-  beforeEach(async () => {
-    const { prisma } = await import('../../src/db/client.js')
-    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
-    vi.mocked(prisma.remittanceOrder.findMany).mockResolvedValue([
-      {
-        id: 'remit_001',
-        corridorCode: 'MY',
-        sourceCurrency: 'MYR',
-        amountSource: '1000',
-        quotedAmountIdr: '3417400',
-        recipientName: 'Budi Santoso',
-        status: 'PENDING',
-        expiresAt: new Date(Date.now() + 5 * 60_000),
-        createdAt: new Date(),
-      },
-    ] as never)
-  })
-
-  it('GET /v1/remittance → 200 with array of orders', async () => {
-    const res = await server.inject({ method: 'GET', url: '/v1/remittance', headers: authHeaders() })
-    expect(res.statusCode).toBe(200)
-    const body = JSON.parse(res.body)
-    expect(body.success).toBe(true)
-    expect(Array.isArray(body.data)).toBe(true)
-    expect(body.data[0].corridorCode).toBe('MY')
-  })
-
-  it('GET /v1/remittance?status=COMPLETED → 200 filtered', async () => {
-    const res = await server.inject({ method: 'GET', url: '/v1/remittance?status=COMPLETED', headers: authHeaders() })
-    expect(res.statusCode).toBe(200)
-    const body = JSON.parse(res.body)
-    expect(body.success).toBe(true)
-    expect(body).toHaveProperty('nextCursor')
   })
 })
 
