@@ -1,10 +1,11 @@
 import { prisma } from '../db/client.js'
 import { watchPolygonDeposit } from '../services/blockchain/index.js'
+import { pollTronDeposit } from '../services/blockchain/tron.js'
 import { handleOnchainDeposit } from '../services/settlement/offramp.js'
 import { Stablecoin, Chain } from '../types/index.js'
 
 const POLL_INTERVAL_MS = 30_000
-const CHAINS_TO_WATCH = [Chain.POLYGON] as const
+const CHAINS_TO_WATCH = [Chain.POLYGON, Chain.TRON] as const
 
 export async function startDepositWatcher(): Promise<void> {
   console.log('[deposit-watcher] Starting…')
@@ -29,9 +30,11 @@ export async function startDepositWatcher(): Promise<void> {
       if (!CHAINS_TO_WATCH.includes(order.chain as typeof CHAINS_TO_WATCH[number])) continue
 
       watchedAddresses.add(order.depositAddress)
-      console.log(`[deposit-watcher] Watching ${order.depositAddress} for order ${order.id}`)
+      console.log(`[deposit-watcher] Watching ${order.depositAddress} (${order.chain}) for order ${order.id}`)
 
-      watchPolygonDeposit({
+      const watchFn = order.chain === Chain.TRON ? pollTronDeposit : watchPolygonDeposit
+
+      watchFn({
         address: order.depositAddress,
         stablecoin: order.stablecoin as Stablecoin,
         minAmount: order.amountStablecoin.toString(),

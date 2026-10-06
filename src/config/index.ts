@@ -70,6 +70,10 @@ const envSchema = z.object({
   CHAINALYSIS_API_KEY: z.string().optional(),
   CHAINALYSIS_API_URL: z.string().default('https://api.chainalysis.com'),
 
+  // Travel Rule (Notabene / IVMS 101) — SEOJK 20/2024 requirement for transfers > IDR 46M
+  NOTABENE_API_KEY: z.string().optional(),
+  NOTABENE_API_URL: z.string().default('https://api.notabene.id'),
+
   RATE_LIMIT_MAX: z.coerce.number().default(1000),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
 })

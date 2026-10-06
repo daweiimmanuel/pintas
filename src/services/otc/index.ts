@@ -6,9 +6,10 @@ import { disburseToBankAccount } from '../disbursement/index.js'
 import { dispatchWebhookEvent } from '../webhook/delivery.js'
 import type { Stablecoin, Chain } from '../../types/index.js'
 
-const MIN_IDR = new Decimal('75000000') // IDR 75M minimum
-const DEFAULT_SPREAD_BPS = 30           // 30 bps OTC spread (tighter than retail)
-const QUOTE_TTL_MS = 30_000             // 30-second quote lock
+const MIN_IDR = new Decimal('75000000')   // IDR 75M minimum
+const TIER3_IDR = new Decimal('500000000') // IDR 500M — requires TIER3 KYC
+const DEFAULT_SPREAD_BPS = 30             // 30 bps OTC spread (tighter than retail)
+const QUOTE_TTL_MS = 30_000               // 30-second quote lock
 
 export interface OtcQuoteParams {
   customerId: string
@@ -31,6 +32,19 @@ export async function quoteOtc(params: OtcQuoteParams) {
       new Error(`OTC minimum is IDR ${MIN_IDR.toFixed(0)}. Requested: IDR ${params.amountIdr}`),
       { statusCode: 400 }
     )
+  }
+
+  // Amounts ≥ IDR 500M require institutional KYC (Tier 3) per OJK KYB requirements
+  if (amountIdr.gte(TIER3_IDR)) {
+    const tier3Record = await prisma.kycRecord.findFirst({
+      where: { customerId: params.customerId, tier: 'TIER3', status: 'APPROVED' },
+    })
+    if (!tier3Record) {
+      throw Object.assign(
+        new Error('Tier 3 KYC required for OTC orders ≥ IDR 500,000,000. Submit POST /v1/kyc/tier3.'),
+        { statusCode: 403, code: 'KYC_TIER3_REQUIRED' }
+      )
+    }
   }
 
   const spreadBps = params.spreadBps ?? DEFAULT_SPREAD_BPS

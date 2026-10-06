@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
-import { verifyTier1, verifyTier2 } from '../../services/kyc/verihubs.js'
+import { verifyTier1, verifyTier2, verifyTier3 } from '../../services/kyc/verihubs.js'
 import { prisma } from '../../db/client.js'
 import { dispatchWebhookEvent } from '../../services/webhook/delivery.js'
 
@@ -127,6 +127,52 @@ const kycRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.send({
       success: true,
       data: { recordId: record.id, status: result.status },
+    })
+  })
+
+  // POST /v1/kyc/tier3 — institutional KYB (manual review queue)
+  fastify.post('/kyc/tier3', async (req, reply) => {
+    const schema = z.object({
+      companyName: z.string().min(2).max(200),
+      npwp: z.string().min(15).max(20),
+      uboNames: z.array(z.string().min(2)).min(1),
+      financialStatementUrl: z.string().url().optional(),
+      amlQuestionnaireUrl: z.string().url().optional(),
+    })
+
+    const body = schema.parse(req.body)
+
+    const existing = await prisma.kycRecord.findFirst({
+      where: { customerId: req.customerId, tier: 'TIER3', status: { in: ['PENDING', 'APPROVED'] } },
+    })
+
+    if (existing) {
+      return reply.code(409).send({
+        success: false,
+        error: { code: 'ALREADY_SUBMITTED', message: 'Tier 3 KYC already submitted or approved' },
+      })
+    }
+
+    const result = verifyTier3(body)
+
+    const record = await prisma.kycRecord.create({
+      data: {
+        customerId: req.customerId,
+        tier: 'TIER3',
+        status: 'PENDING',
+        npwp: body.npwp,
+        companyName: body.companyName,
+        notes: result.notes,
+      },
+    })
+
+    return reply.code(202).send({
+      success: true,
+      data: {
+        recordId: record.id,
+        status: 'PENDING',
+        message: 'Under review (1–2 business days)',
+      },
     })
   })
 

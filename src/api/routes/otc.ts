@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { quoteOtc, acceptOtc, cancelOtc, getOtcOrder } from '../../services/otc/index.js'
+import { prisma } from '../../db/client.js'
 
 const otcRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /v1/otc/quote — request a locked OTC quote (min IDR 75M)
@@ -43,6 +44,31 @@ const otcRoutes: FastifyPluginAsync = async (fastify) => {
     const order = await cancelOtc(orderId, req.customerId)
 
     return reply.send({ success: true, data: order })
+  })
+
+  // GET /v1/otc — list OTC orders with cursor pagination
+  fastify.get('/otc', async (req, reply) => {
+    const schema = z.object({
+      status: z.enum(['QUOTED', 'ACCEPTED', 'EXECUTING', 'SETTLED', 'FAILED', 'CANCELLED', 'EXPIRED']).optional(),
+      cursor: z.string().optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(20),
+    })
+
+    const query = schema.parse(req.query)
+
+    const orders = await prisma.otcOrder.findMany({
+      where: {
+        customerId: req.customerId,
+        ...(query.status ? { status: query.status } : {}),
+      },
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+      take: query.limit,
+      orderBy: { createdAt: 'desc' },
+    })
+
+    const nextCursor = orders.length === query.limit ? orders[orders.length - 1].id : null
+
+    return reply.send({ success: true, data: orders, nextCursor })
   })
 
   // GET /v1/otc/:orderId — retrieve an OTC order

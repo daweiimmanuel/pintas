@@ -4,7 +4,7 @@ import {
   createOfframpOrder,
   handleDisbursementCallback,
 } from '../../services/settlement/offramp.js'
-import { validateDurianpayWebhook } from '../../services/disbursement/index.js'
+import { validateDurianpayWebhook, verifyBankAccount } from '../../services/disbursement/index.js'
 import { Stablecoin, Chain, DisbursementType } from '../../types/index.js'
 import { prisma } from '../../db/client.js'
 
@@ -62,6 +62,19 @@ const offrampRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     return reply.send({ success: true, data: order })
+  })
+
+  // POST /v1/offramp/verify-account — verify bank account name before off-ramp
+  fastify.post('/offramp/verify-account', async (req, reply) => {
+    const schema = z.object({
+      bankCode: z.string().min(3).max(10),
+      accountNumber: z.string().min(5).max(20),
+    })
+
+    const body = schema.parse(req.body)
+    const result = await verifyBankAccount(body)
+
+    return reply.send({ success: true, data: result })
   })
 
   // POST /v1/callbacks/durianpay — DurianPay async disbursement callback (no auth)

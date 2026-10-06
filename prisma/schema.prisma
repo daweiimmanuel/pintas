@@ -284,10 +284,14 @@ model WebhookDelivery {
   webhook        Webhook  @relation(fields: [webhookId], references: [id])
   event          String
   payload        Json
-  onrampOrderId  String?
-  onrampOrder    OnrampOrder? @relation(fields: [onrampOrderId], references: [id])
-  offrampOrderId String?
-  offrampOrder   OfframpOrder? @relation(fields: [offrampOrderId], references: [id])
+  onrampOrderId     String?
+  onrampOrder       OnrampOrder?     @relation(fields: [onrampOrderId], references: [id])
+  offrampOrderId    String?
+  offrampOrder      OfframpOrder?    @relation(fields: [offrampOrderId], references: [id])
+  remittanceOrderId String?
+  remittanceOrder   RemittanceOrder? @relation(fields: [remittanceOrderId], references: [id])
+  otcOrderId        String?
+  otcOrder          OtcOrder?        @relation(fields: [otcOrderId], references: [id])
 
   attempts       Int      @default(0)
   lastAttemptAt  DateTime?
@@ -350,6 +354,8 @@ model OtcOrder {
   counterpartyRef  String?
   failReason       String?
 
+  webhookDeliveries WebhookDelivery[]
+
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
@@ -389,6 +395,8 @@ model RemittanceOrder {
 
   // Linked disbursement
   offrampOrderId   String?          @unique
+
+  webhookDeliveries WebhookDelivery[]
 
   // Execution
   status           RemittanceStatus @default(PENDING)
