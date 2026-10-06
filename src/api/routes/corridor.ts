@@ -40,7 +40,21 @@ const SOURCE_CURRENCIES: Record<string, string> = {
 
 export async function corridorRoutes(app: FastifyInstance) {
   // GET /v1/remittance/quote?corridorCode=MY&amountSource=1000
-  app.get('/remittance/quote', async (request, reply) => {
+  app.get('/remittance/quote', {
+    schema: {
+      tags: ['remittance'],
+      summary: 'Get a remittance quote: source currency amount → quoted IDR',
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        required: ['corridorCode', 'amountSource'],
+        properties: {
+          corridorCode: { type: 'string', enum: ['MY', 'SA', 'AE', 'SG', 'US'] },
+          amountSource: { type: 'string', description: 'Amount in source currency' },
+        },
+      },
+    },
+  }, async (request, reply) => {
     const query = QuoteSchema.parse(request.query)
     const sourceCurrency = SOURCE_CURRENCIES[query.corridorCode]
 
@@ -54,7 +68,27 @@ export async function corridorRoutes(app: FastifyInstance) {
   })
 
   // POST /v1/remittance
-  app.post('/remittance', async (request, reply) => {
+  app.post('/remittance', {
+    schema: {
+      tags: ['remittance'],
+      summary: 'Create a cross-border remittance order',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['corridorCode', 'sourceCurrency', 'amountSource', 'recipientName'],
+        properties: {
+          corridorCode: { type: 'string', enum: ['MY', 'SA', 'AE', 'SG', 'US'] },
+          sourceCurrency: { type: 'string', minLength: 3, maxLength: 3, description: 'ISO 4217 source currency (e.g. MYR)' },
+          amountSource: { type: 'string', description: 'Amount in source currency' },
+          recipientName: { type: 'string', minLength: 2, maxLength: 100 },
+          recipientBank: { type: 'string', description: 'Bank code for bank transfer payout' },
+          recipientAccountNumber: { type: 'string' },
+          recipientEwallet: { type: 'string', enum: ['GOPAY', 'OVO', 'DANA', 'SHOPEEPAY', 'LINKAJA'] },
+          recipientPhone: { type: 'string', description: 'E-wallet phone (format: 08xxxxxxxxxx)' },
+        },
+      },
+    },
+  }, async (request, reply) => {
     const body = CreateRemittanceSchema.parse(request.body)
 
     const sourceCurrency = SOURCE_CURRENCIES[body.corridorCode]
@@ -140,7 +174,21 @@ export async function corridorRoutes(app: FastifyInstance) {
   })
 
   // POST /v1/remittance/:remittanceId/confirm — partner confirms receipt of source funds
-  app.post('/remittance/:remittanceId/confirm', async (request, reply) => {
+  app.post('/remittance/:remittanceId/confirm', {
+    schema: {
+      tags: ['remittance'],
+      summary: 'Confirm receipt of source funds and trigger IDR disbursement',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['receivedAmountSource'],
+        properties: {
+          receivedAmountSource: { type: 'string', description: 'Actual amount received in source currency' },
+          externalRef: { type: 'string', maxLength: 100, description: 'Partner reference ID' },
+        },
+      },
+    },
+  }, async (request, reply) => {
     const { remittanceId } = request.params as { remittanceId: string }
 
     const schema = z.object({

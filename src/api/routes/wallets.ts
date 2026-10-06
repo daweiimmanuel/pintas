@@ -17,7 +17,23 @@ function validateAddress(chain: Chain, address: string): boolean {
 
 const walletsRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /v1/wallets — register a settlement wallet
-  fastify.post('/wallets', async (req, reply) => {
+  fastify.post('/wallets', {
+    schema: {
+      tags: ['wallets'],
+      summary: 'Register a settlement wallet address',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['chain', 'stablecoin', 'address'],
+        properties: {
+          chain: { type: 'string', enum: ['POLYGON', 'TRON', 'STELLAR', 'ETHEREUM'] },
+          stablecoin: { type: 'string', enum: ['USDT', 'USDC'] },
+          address: { type: 'string', minLength: 10, maxLength: 100, description: 'On-chain wallet address' },
+          label: { type: 'string', maxLength: 64 },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       chain: z.nativeEnum(Chain),
       stablecoin: z.nativeEnum(Stablecoin),

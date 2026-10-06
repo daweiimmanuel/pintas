@@ -21,7 +21,22 @@ const ratesRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // GET /v1/rates/quote/onramp?amountIdr=1000000&stablecoin=USDT&chain=POLYGON
-  fastify.get('/rates/quote/onramp', async (req, reply) => {
+  fastify.get('/rates/quote/onramp', {
+    schema: {
+      tags: ['rates'],
+      summary: 'Get an on-ramp quote: IDR amount → stablecoin amount at current rate',
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        required: ['amountIdr'],
+        properties: {
+          amountIdr: { type: 'string', description: 'IDR amount to convert' },
+          stablecoin: { type: 'string', enum: ['USDT', 'USDC'], default: 'USDT' },
+          chain: { type: 'string', enum: ['POLYGON', 'TRON', 'STELLAR', 'ETHEREUM'], default: 'POLYGON' },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       amountIdr: z.string().regex(/^\d+(\.\d+)?$/),
       stablecoin: z.nativeEnum(Stablecoin).default(Stablecoin.USDT),
@@ -35,7 +50,22 @@ const ratesRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // GET /v1/rates/quote/offramp?amountStablecoin=10&stablecoin=USDT&chain=POLYGON
-  fastify.get('/rates/quote/offramp', async (req, reply) => {
+  fastify.get('/rates/quote/offramp', {
+    schema: {
+      tags: ['rates'],
+      summary: 'Get an off-ramp quote: stablecoin amount → IDR amount at current rate',
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        required: ['amountStablecoin'],
+        properties: {
+          amountStablecoin: { type: 'string', description: 'Stablecoin amount to convert' },
+          stablecoin: { type: 'string', enum: ['USDT', 'USDC'], default: 'USDT' },
+          chain: { type: 'string', enum: ['POLYGON', 'TRON', 'STELLAR', 'ETHEREUM'], default: 'POLYGON' },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       amountStablecoin: z.string().regex(/^\d+(\.\d+)?$/),
       stablecoin: z.nativeEnum(Stablecoin).default(Stablecoin.USDT),

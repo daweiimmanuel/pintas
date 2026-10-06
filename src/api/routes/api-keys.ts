@@ -5,7 +5,23 @@ import { prisma } from '../../db/client.js'
 
 const apiKeysRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /v1/api-keys — create a new API key
-  fastify.post('/api-keys', async (req, reply) => {
+  fastify.post('/api-keys', {
+    schema: {
+      tags: ['api-keys'],
+      summary: 'Create a new API key',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 100, description: 'Descriptive label for the key' },
+          scopes: { type: 'array', items: { type: 'string' }, default: ['*'], description: 'Permission scopes' },
+          ipAllowlist: { type: 'array', items: { type: 'string' }, default: [], description: 'IP addresses allowed to use this key (empty = all IPs)' },
+          expiresAt: { type: 'string', format: 'date-time', description: 'Optional expiry timestamp (ISO 8601)' },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       name: z.string().min(1).max(100),
       scopes: z.array(z.string().min(1).max(64)).default(['*']),

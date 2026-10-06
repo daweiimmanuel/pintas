@@ -16,6 +16,17 @@ const errorPlugin: FastifyPluginAsync = async (fastify) => {
         })
       }
 
+      if (error.validation) {
+        return reply.code(400).send({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: error.message,
+            details: error.validation,
+          },
+        })
+      }
+
       if (error.statusCode === 429) {
         return reply.code(429).send({
           success: false,

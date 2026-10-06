@@ -18,6 +18,7 @@ import walletsRoutes from './routes/wallets.js'
 import apiKeysRoutes from './routes/api-keys.js'
 import meRoutes from './routes/me.js'
 import adminRoutes from './routes/admin.js'
+import authRoutes from './routes/auth.js'
 
 export async function buildServer() {
   const fastify = Fastify({
@@ -42,7 +43,8 @@ export async function buildServer() {
         contact: { name: 'Pintas Support', url: 'https://pintas.id' },
       },
       tags: [
-        { name: 'rates', description: 'Exchange rates and quotes' },
+        { name: 'auth', description: 'Customer registration and authentication' },
+      { name: 'rates', description: 'Exchange rates and quotes' },
         { name: 'onramp', description: 'IDR → stablecoin' },
         { name: 'offramp', description: 'Stablecoin → IDR' },
         { name: 'remittance', description: 'Cross-border remittance' },
@@ -51,12 +53,14 @@ export async function buildServer() {
         { name: 'wallets', description: 'Custody wallet addresses' },
         { name: 'webhooks', description: 'Event subscriptions' },
         { name: 'api-keys', description: 'API key management' },
+        { name: 'transactions', description: 'Unified transaction history' },
         { name: 'me', description: 'Customer profile' },
         { name: 'admin', description: 'Internal admin operations (requires admin:write scope)' },
       ],
       components: {
         securitySchemes: {
           bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'API key' },
+          masterKey: { type: 'http', scheme: 'bearer', bearerFormat: 'Master API key secret' },
         },
       },
       security: [{ bearerAuth: [] }],
@@ -109,6 +113,7 @@ export async function buildServer() {
       await v1.register(walletsRoutes)
       await v1.register(apiKeysRoutes)
       await v1.register(meRoutes)
+      await v1.register(authRoutes)
       await v1.register(adminRoutes)
     },
     { prefix: '/v1' }

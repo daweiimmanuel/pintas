@@ -21,7 +21,19 @@ const meRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // PATCH /v1/me — update customer display name
-  fastify.patch('/me', async (req, reply) => {
+  fastify.patch('/me', {
+    schema: {
+      tags: ['me'],
+      summary: 'Update customer display name',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 2, maxLength: 100 },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       name: z.string().min(2).max(100).optional(),
     })
