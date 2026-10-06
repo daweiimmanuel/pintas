@@ -25,6 +25,7 @@
     "@fastify/rate-limit": "^9.1.0",
     "@fastify/swagger": "^8.14.0",
     "@fastify/swagger-ui": "^3.0.0",
+    "@fastify/websocket": "^7.2.0",
     "@prisma/client": "^5.22.0",
     "@stellar/stellar-sdk": "^12.3.0",
     "axios": "^1.7.9",

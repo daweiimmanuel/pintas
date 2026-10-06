@@ -7,12 +7,31 @@ declare module 'fastify' {
   interface FastifyRequest {
     customerId: string
     apiKeyId: string
+    keyScopes: string[]
+  }
+  interface FastifyInstance {
+    requireScope: (scope: string) => (req: FastifyRequest, reply: FastifyReply) => Promise<void>
   }
 }
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.decorateRequest('customerId', '')
   fastify.decorateRequest('apiKeyId', '')
+  fastify.decorateRequest('keyScopes', null as unknown as string[])
+
+  fastify.decorate(
+    'requireScope',
+    (scope: string) =>
+      async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+        const scopes: string[] = req.keyScopes ?? []
+        if (!scopes.includes('*') && !scopes.includes(scope)) {
+          return reply.code(403).send({
+            success: false,
+            error: { code: 'FORBIDDEN', message: `Scope '${scope}' required` },
+          })
+        }
+      }
+  )
 
   fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
     // Skip auth for health check and callback routes
@@ -62,6 +81,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
 
     request.customerId = apiKey.customerId
     request.apiKeyId = apiKey.id
+    request.keyScopes = apiKey.scopes
 
     // Update lastUsedAt async (non-blocking)
     prisma.apiKey

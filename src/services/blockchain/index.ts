@@ -4,6 +4,7 @@ import { config } from '../../config/index.js'
 import { sendPolygonStablecoin, getPolygonBalance } from './polygon.js'
 import { sendStellarStablecoin, getStellarBalance } from './stellar.js'
 import { sendTronUsdt } from './tron.js'
+import { screenAddress, isHighRisk } from '../aml/chainalysis.js'
 
 export { watchPolygonDeposit } from './polygon.js'
 
@@ -14,6 +15,14 @@ export async function sendStablecoin(params: {
   stablecoin: Stablecoin
   memo?: string
 }): Promise<TransferResult> {
+  const screening = await screenAddress(params.to)
+  if (isHighRisk(screening)) {
+    throw Object.assign(
+      new Error(`Address failed AML screening (risk: ${screening.risk})`),
+      { statusCode: 403 }
+    )
+  }
+
   switch (params.chain) {
     case Chain.POLYGON:
     case Chain.ETHEREUM:

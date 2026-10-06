@@ -2,7 +2,7 @@
  * Integration tests for Pintas API
  */
 import crypto from 'crypto'
-import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi, beforeEach, afterEach } from 'vitest'
 import { buildServer } from '../../src/api/server.js'
 import type { FastifyInstance } from 'fastify'
 
@@ -39,6 +39,9 @@ vi.mock('../../src/db/client.js', () => ({
     apiKey: {
       findUnique: vi.fn().mockResolvedValue(null),
       update: vi.fn().mockResolvedValue({}),
+      create: vi.fn().mockResolvedValue({ id: 'key_new_001', name: 'New Key', scopes: ['*'], ipAllowlist: [], expiresAt: null, lastUsedAt: null, createdAt: new Date(), updatedAt: new Date(), revokedAt: null }),
+      findMany: vi.fn().mockResolvedValue([{ id: 'key_test_001', name: 'Test Key', scopes: ['*'], ipAllowlist: [], lastUsedAt: null, expiresAt: null, createdAt: new Date() }]),
+      findFirst: vi.fn().mockResolvedValue({ id: 'key_other_001', name: 'Other Key' }),
     },
     exchangeRate: { create: vi.fn().mockResolvedValue({}) },
     virtualAccount: { findUnique: vi.fn().mockResolvedValue(null) },
@@ -75,7 +78,15 @@ vi.mock('../../src/db/client.js', () => ({
       findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({ id: 'remit_001', status: 'PENDING', createdAt: new Date(), updatedAt: new Date() }),
     },
-    webhook: { findMany: vi.fn().mockResolvedValue([]) },
+    webhook: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue({ id: 'wh_001', customerId: 'cust_test_sprint4' }),
+    },
+    webhookDelivery: {
+      findMany: vi.fn().mockResolvedValue([
+        { id: 'del_001', webhookId: 'wh_001', event: 'onramp.created', attempts: 1, succeededAt: new Date(), failedAt: null, createdAt: new Date() },
+      ]),
+    },
   },
 }))
 
@@ -118,6 +129,13 @@ vi.mock('../../src/services/kyc/verihubs.js', () => ({
     status: 'approved',
     score: 90,
   }),
+}))
+
+// ─── AML mock (default: low risk, pass) ───────────────────────────────────────
+
+vi.mock('../../src/services/aml/chainalysis.js', () => ({
+  screenAddress: vi.fn().mockResolvedValue({ address: '0xtest', risk: 'low' }),
+  isHighRisk: vi.fn().mockReturnValue(false),
 }))
 
 // ─── Test constants (safe outside mock factories) ─────────────────────────────
@@ -497,5 +515,190 @@ describe('Authenticated: remittance quote', () => {
     const body = JSON.parse(res.body)
     expect(Number(body.quotedAmountIdr)).toBeGreaterThan(0)
     expect(body.fxRate).toBeTruthy()
+  })
+})
+
+// ─── Authenticated: customer profile (/v1/me) ────────────────────────────────
+
+describe('Authenticated: /v1/me', () => {
+  beforeEach(async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
+    vi.mocked(prisma.customer.findUniqueOrThrow).mockResolvedValue({
+      id: TEST_CUSTOMER_ID,
+      name: 'Test Corp',
+      email: 'test@testcorp.io',
+      kybStatus: 'PENDING' as never,
+      tier: 'TIER1' as never,
+      createdAt: new Date(),
+    } as never)
+  })
+
+  it('GET /v1/me → 200 with customer data', async () => {
+    const res = await server.inject({ method: 'GET', url: '/v1/me', headers: authHeaders() })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(body.data.id).toBe(TEST_CUSTOMER_ID)
+    expect(body.data.email).toBe('test@testcorp.io')
+    expect(body.data.kybStatus).toBeTruthy()
+  })
+
+  it('PATCH /v1/me → 200 updates name', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.customer.update).mockResolvedValue({
+      id: TEST_CUSTOMER_ID,
+      name: 'Updated Corp',
+      email: 'test@testcorp.io',
+      kybStatus: 'PENDING' as never,
+      tier: 'TIER1' as never,
+      updatedAt: new Date(),
+    } as never)
+
+    const res = await server.inject({
+      method: 'PATCH',
+      url: '/v1/me',
+      payload: { name: 'Updated Corp' },
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.data.name).toBe('Updated Corp')
+  })
+})
+
+// ─── Authenticated: API key management ───────────────────────────────────────
+
+describe('Authenticated: /v1/api-keys', () => {
+  beforeEach(async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
+    vi.mocked(prisma.apiKey.create).mockResolvedValue({
+      id: 'key_new_001',
+      name: 'Integration Key',
+      scopes: ['*'],
+      ipAllowlist: [],
+      expiresAt: null,
+      lastUsedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      revokedAt: null,
+    } as never)
+    vi.mocked(prisma.apiKey.findMany).mockResolvedValue([
+      { id: 'key_test_001', name: 'Test Key', scopes: ['*'], ipAllowlist: [], lastUsedAt: null, expiresAt: null, createdAt: new Date() },
+    ] as never)
+    vi.mocked(prisma.apiKey.findFirst).mockResolvedValue({ id: 'key_other_001', name: 'Other Key' } as never)
+  })
+
+  it('POST /v1/api-keys → 201 with raw key (no keyHash)', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      payload: { name: 'Integration Key', scopes: ['onramp:write', 'rates:read'] },
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(body.data.key).toMatch(/^pk_[0-9a-f]{64}$/)
+    expect(body.data.keyHash).toBeUndefined()
+    expect(body.data.name).toBe('Integration Key')
+  })
+
+  it('GET /v1/api-keys → 200 with key list (no keyHash)', async () => {
+    const res = await server.inject({ method: 'GET', url: '/v1/api-keys', headers: authHeaders() })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(Array.isArray(body.data)).toBe(true)
+    // Ensure keyHash is never exposed
+    for (const key of body.data) {
+      expect(key.keyHash).toBeUndefined()
+    }
+  })
+
+  it('DELETE /v1/api-keys/:id → 400 when revoking own key', async () => {
+    const res = await server.inject({
+      method: 'DELETE',
+      url: `/v1/api-keys/${mockApiKey.id}`,
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(400)
+    const body = JSON.parse(res.body)
+    expect(body.error.code).toBe('SELF_REVOCATION')
+  })
+
+  it('DELETE /v1/api-keys/:id → 200 when revoking another key', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.update).mockResolvedValue({} as never)
+
+    const res = await server.inject({
+      method: 'DELETE',
+      url: '/v1/api-keys/key_other_001',
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+  })
+})
+
+// ─── Authenticated: webhook delivery history ──────────────────────────────────
+
+describe('Authenticated: webhook delivery history', () => {
+  beforeEach(async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
+    vi.mocked(prisma.webhook.findFirst).mockResolvedValue({ id: 'wh_001', customerId: TEST_CUSTOMER_ID } as never)
+    vi.mocked(prisma.webhookDelivery.findMany).mockResolvedValue([
+      { id: 'del_001', webhookId: 'wh_001', event: 'onramp.created', attempts: 1, succeededAt: new Date(), failedAt: null, createdAt: new Date() },
+    ] as never)
+  })
+
+  it('GET /v1/webhooks/:id/deliveries → 200 with delivery array', async () => {
+    const res = await server.inject({
+      method: 'GET',
+      url: '/v1/webhooks/wh_001/deliveries',
+      headers: authHeaders(),
+    })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(Array.isArray(body.data)).toBe(true)
+    expect(body.data[0].event).toBe('onramp.created')
+  })
+})
+
+// ─── AML screening block ──────────────────────────────────────────────────────
+
+describe('AML: high-risk address blocks stablecoin dispatch', () => {
+  beforeEach(async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.apiKey.findUnique).mockResolvedValue(mockApiKey as never)
+    vi.mocked(prisma.customer.findUniqueOrThrow).mockResolvedValue({ id: TEST_CUSTOMER_ID, name: 'Test Corp' } as never)
+    vi.mocked(prisma.onrampOrder.create).mockResolvedValue({
+      id: 'onramp_aml_001', customerId: TEST_CUSTOMER_ID, status: 'PENDING', createdAt: new Date(), updatedAt: new Date(),
+    } as never)
+
+    // Override AML mock to return high risk for this test
+    const aml = await import('../../src/services/aml/chainalysis.js')
+    vi.mocked(aml.screenAddress).mockResolvedValue({ address: '0xbad', risk: 'severe' })
+    vi.mocked(aml.isHighRisk).mockReturnValue(true)
+  })
+
+  afterEach(async () => {
+    // Restore low-risk default
+    const aml = await import('../../src/services/aml/chainalysis.js')
+    vi.mocked(aml.screenAddress).mockResolvedValue({ address: '0xtest', risk: 'low' })
+    vi.mocked(aml.isHighRisk).mockReturnValue(false)
+  })
+
+  it('sendStablecoin to sanctioned address → 403', async () => {
+    // sendStablecoin is called async by setImmediate in the onramp conversion worker,
+    // not on the HTTP request path. We test the service directly here.
+    const { sendStablecoin } = await import('../../src/services/blockchain/index.js')
+    await expect(
+      sendStablecoin({ chain: 'POLYGON' as never, to: '0xbad', amount: '100', stablecoin: 'USDT' as never })
+    ).rejects.toMatchObject({ statusCode: 403 })
   })
 })
