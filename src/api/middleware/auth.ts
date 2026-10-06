@@ -42,7 +42,8 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       url.startsWith('/v1/sandbox/') ||
       url.startsWith('/docs') ||
       url.startsWith('/documentation') ||
-      url === '/v1/auth/register'
+      url === '/v1/auth/register' ||
+      url.startsWith('/app')
     ) return
 
     const authHeader = request.headers.authorization

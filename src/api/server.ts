@@ -26,6 +26,7 @@ import sandboxRoutes from './routes/sandbox.js'
 import webhookEndpointRoutes from '../modules/webhooks/routes.js'
 import providerCallbackRoutes from './routes/provider-callbacks.js'
 import idempotencyPlugin from '../lib/idempotency.js'
+import appBffRoutes from './routes/app-bff.js'
 
 export async function buildServer() {
   const fastify = Fastify({
@@ -101,6 +102,9 @@ export async function buildServer() {
   await fastify.register(errorPlugin)
   await fastify.register(authPlugin)
   await fastify.register(idempotencyPlugin)
+
+  // App dashboard (sandbox demo) — served outside /v1 prefix
+  await fastify.register(appBffRoutes)
 
   // Health check (no auth required)
   fastify.get('/health', async () => ({

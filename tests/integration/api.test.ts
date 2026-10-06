@@ -159,6 +159,15 @@ vi.mock('../../src/db/client.js', () => ({
         { id: 'del_001', webhookId: 'wh_001', event: 'onramp.created', attempts: 1, succeededAt: new Date(), failedAt: null, createdAt: new Date() },
       ]),
     },
+    collectionInstruction: {
+      create: vi.fn().mockResolvedValue({
+        id: 'ci_001', orderId: 'so_001', provider: 'mock',
+        virtualAccountRef: 'va-mock-so_001', paymentReference: 'PNT-so_001',
+        bankDetailsJson: { bankName: 'Mock Bank', accountNumber: '0000-MOCK', routingNumber: '021000021', swiftCode: 'MOCKUS33' },
+        createdAt: new Date(),
+      }),
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     idempotencyKey: {
       findUnique: vi.fn().mockResolvedValue(null),
       upsert: vi.fn().mockResolvedValue({}),
