@@ -1,5 +1,6 @@
 import { Chain, Stablecoin } from '../../types/index.js'
 import type { TransferResult, WalletBalance } from '../../types/index.js'
+import { config } from '../../config/index.js'
 import { sendPolygonStablecoin, getPolygonBalance } from './polygon.js'
 import { sendStellarStablecoin, getStellarBalance } from './stellar.js'
 import { sendTronUsdt } from './tron.js'
@@ -43,10 +44,8 @@ export async function getBalance(
 }
 
 export function getSettlementAddress(chain: Chain, stablecoin: Stablecoin): string {
-  // Returns the Pintas settlement wallet address for receiving stablecoin deposits
-  // These are configured per chain and managed by the custody provider
-  const envKey = `${chain}_${stablecoin}_SETTLEMENT_ADDRESS`
-  const address = process.env[envKey]
+  const envKey = `${chain}_${stablecoin}_SETTLEMENT_ADDRESS` as keyof typeof config
+  const address = (config as unknown as Record<string, string | undefined>)[envKey as string]
   if (!address) {
     throw new Error(`Settlement address not configured for ${chain}/${stablecoin}`)
   }

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { quoteCorridor, createRemittanceOrder, getRemittanceOrder } from '../../services/corridor/index.js'
+import { quoteCorridor, createRemittanceOrder, getRemittanceOrder, confirmRemittanceReceipt } from '../../services/corridor/index.js'
 
 const SUPPORTED_CORRIDORS = ['MY', 'SA', 'AE', 'SG', 'US'] as const
 
@@ -79,9 +79,42 @@ export async function corridorRoutes(app: FastifyInstance) {
 
     const order = await getRemittanceOrder(remittanceId, request.customerId)
     if (!order) {
-      return reply.status(404).send({ error: 'Remittance order not found' })
+      return reply.status(404).send({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Remittance order not found' },
+      })
     }
 
-    return reply.send(order)
+    return reply.send({ success: true, data: order })
+  })
+
+  // POST /v1/remittance/:remittanceId/confirm — partner confirms receipt of source funds
+  app.post('/remittance/:remittanceId/confirm', async (request, reply) => {
+    const { remittanceId } = request.params as { remittanceId: string }
+
+    const schema = z.object({
+      receivedAmountSource: z.string().regex(/^\d+(\.\d{1,2})?$/),
+      externalRef: z.string().max(100).optional(),
+    })
+
+    const body = schema.parse(request.body)
+
+    // Scope check — only allow the order's owner to confirm
+    const order = await getRemittanceOrder(remittanceId, request.customerId)
+    if (!order) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Remittance order not found' },
+      })
+    }
+
+    await confirmRemittanceReceipt(
+      remittanceId,
+      body.receivedAmountSource,
+      body.externalRef ?? remittanceId
+    )
+
+    const updated = await getRemittanceOrder(remittanceId, request.customerId)
+    return reply.send({ success: true, data: updated })
   })
 }

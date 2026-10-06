@@ -52,6 +52,17 @@ const envSchema = z.object({
   VERIHUBS_APP_ID: z.string().optional(),
   VERIHUBS_API_URL: z.string().default('https://api.verihubs.com'),
 
+  // FX Provider
+  OPEN_EXCHANGE_RATES_API_KEY: z.string().optional(),
+
+  // Settlement addresses (custody wallets that receive inbound stablecoin deposits)
+  POLYGON_USDT_SETTLEMENT_ADDRESS: z.string().optional(),
+  POLYGON_USDC_SETTLEMENT_ADDRESS: z.string().optional(),
+  TRON_USDT_SETTLEMENT_ADDRESS: z.string().optional(),
+  STELLAR_USDT_SETTLEMENT_ADDRESS: z.string().optional(),
+  STELLAR_USDC_SETTLEMENT_ADDRESS: z.string().optional(),
+  ETHEREUM_USDT_SETTLEMENT_ADDRESS: z.string().optional(),
+
   // AML
   CHAINALYSIS_API_KEY: z.string().optional(),
   CHAINALYSIS_API_URL: z.string().default('https://api.chainalysis.com'),
