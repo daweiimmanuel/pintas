@@ -118,7 +118,7 @@ export async function acceptOtc(orderId: string, customerId: string) {
     console.error(`[otc] executeOtc ${orderId} failed:`, err.message)
   )
 
-  await dispatchWebhookEvent(customerId, 'otc.accepted', { orderId })
+  await dispatchWebhookEvent(customerId, 'otc.accepted', { orderId }, { otcOrderId: orderId })
 
   return accepted
 }
@@ -150,7 +150,7 @@ export async function executeOtc(orderId: string): Promise<void> {
         orderId,
         txHash: result.txHash,
         amountStablecoin: order.amountStablecoin.toString(),
-      })
+      }, { otcOrderId: orderId })
     } else {
       // SELL: client sends stablecoin (deposited out-of-band), we disburse IDR
       if (!order.bankCode || !order.accountNumber || !order.accountName) {
@@ -176,7 +176,7 @@ export async function executeOtc(orderId: string): Promise<void> {
         orderId,
         disbursementId: result.disbursementId,
         amountIdr: order.amountIdr.toString(),
-      })
+      }, { otcOrderId: orderId })
     }
   } catch (err) {
     const reason = err instanceof Error ? err.message : 'Unknown error'
@@ -184,7 +184,7 @@ export async function executeOtc(orderId: string): Promise<void> {
       where: { id: orderId },
       data: { status: 'FAILED', failReason: reason },
     })
-    await dispatchWebhookEvent(order.customerId, 'otc.failed', { orderId, reason })
+    await dispatchWebhookEvent(order.customerId, 'otc.failed', { orderId, reason }, { otcOrderId: orderId })
     throw err
   }
 }

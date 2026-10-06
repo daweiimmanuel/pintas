@@ -124,7 +124,7 @@ export async function createRemittanceOrder(
     sourceCurrency: remittance.sourceCurrency,
     amountSource: remittance.amountSource,
     quotedAmountIdr: remittance.quotedAmountIdr,
-  })
+  }, { remittanceOrderId: remittance.id })
 
   return toRemittanceOrder(remittance)
 }
@@ -151,7 +151,7 @@ export async function confirmRemittanceReceipt(
     remittanceId,
     receivedAmountSource,
     quotedAmountIdr: remittance.quotedAmountIdr,
-  })
+  }, { remittanceOrderId: remittanceId })
 
   // Travel Rule — SEOJK 20/2024: submit VASP data for transfers > IDR 46M
   if (travelRuleRequired(remittance.quotedAmountIdr)) {
@@ -214,7 +214,7 @@ export async function confirmRemittanceReceipt(
     await dispatchWebhookEvent(remittance.customerId, 'remittance.completed', {
       remittanceId,
       disbursementId,
-    })
+    }, { remittanceOrderId: remittanceId })
   } catch (err) {
     const reason = err instanceof Error ? err.message : 'Unknown error'
     await prisma.remittanceOrder.update({
@@ -224,7 +224,7 @@ export async function confirmRemittanceReceipt(
     await dispatchWebhookEvent(remittance.customerId, 'remittance.failed', {
       remittanceId,
       reason,
-    })
+    }, { remittanceOrderId: remittanceId })
     throw err
   }
 }

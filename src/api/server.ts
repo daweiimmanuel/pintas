@@ -17,6 +17,7 @@ import otcRoutes from './routes/otc.js'
 import walletsRoutes from './routes/wallets.js'
 import apiKeysRoutes from './routes/api-keys.js'
 import meRoutes from './routes/me.js'
+import adminRoutes from './routes/admin.js'
 
 export async function buildServer() {
   const fastify = Fastify({
@@ -51,6 +52,7 @@ export async function buildServer() {
         { name: 'webhooks', description: 'Event subscriptions' },
         { name: 'api-keys', description: 'API key management' },
         { name: 'me', description: 'Customer profile' },
+        { name: 'admin', description: 'Internal admin operations (requires admin:write scope)' },
       ],
       components: {
         securitySchemes: {
@@ -107,6 +109,7 @@ export async function buildServer() {
       await v1.register(walletsRoutes)
       await v1.register(apiKeysRoutes)
       await v1.register(meRoutes)
+      await v1.register(adminRoutes)
     },
     { prefix: '/v1' }
   )

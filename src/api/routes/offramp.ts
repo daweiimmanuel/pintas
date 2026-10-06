@@ -65,7 +65,13 @@ const offrampRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // POST /v1/offramp/verify-account — verify bank account name before off-ramp
-  fastify.post('/offramp/verify-account', async (req, reply) => {
+  fastify.post('/offramp/verify-account', {
+    schema: {
+      tags: ['offramp'],
+      summary: 'Verify bank account name via DurianPay before creating an off-ramp order',
+      security: [{ bearerAuth: [] }],
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       bankCode: z.string().min(3).max(10),
       accountNumber: z.string().min(5).max(20),

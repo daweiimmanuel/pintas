@@ -131,7 +131,13 @@ const kycRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // POST /v1/kyc/tier3 — institutional KYB (manual review queue)
-  fastify.post('/kyc/tier3', async (req, reply) => {
+  fastify.post('/kyc/tier3', {
+    schema: {
+      tags: ['kyc'],
+      summary: 'Submit Tier 3 institutional KYB (manual review queue)',
+      security: [{ bearerAuth: [] }],
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       companyName: z.string().min(2).max(200),
       npwp: z.string().min(15).max(20),

@@ -47,7 +47,13 @@ const otcRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // GET /v1/otc — list OTC orders with cursor pagination
-  fastify.get('/otc', async (req, reply) => {
+  fastify.get('/otc', {
+    schema: {
+      tags: ['otc'],
+      summary: 'List OTC orders with optional status filter and cursor pagination',
+      security: [{ bearerAuth: [] }],
+    },
+  }, async (req, reply) => {
     const schema = z.object({
       status: z.enum(['QUOTED', 'ACCEPTED', 'EXECUTING', 'SETTLED', 'FAILED', 'CANCELLED', 'EXPIRED']).optional(),
       cursor: z.string().optional(),
