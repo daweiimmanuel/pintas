@@ -70,6 +70,14 @@ const offrampRoutes: FastifyPluginAsync = async (fastify) => {
       tags: ['offramp'],
       summary: 'Verify bank account name via DurianPay before creating an off-ramp order',
       security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['bankCode', 'accountNumber'],
+        properties: {
+          bankCode: { type: 'string', minLength: 3, maxLength: 10, description: 'Bank code (e.g. BCA, MANDIRI)' },
+          accountNumber: { type: 'string', minLength: 5, maxLength: 20, description: 'Destination account number' },
+        },
+      },
     },
   }, async (req, reply) => {
     const schema = z.object({

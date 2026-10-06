@@ -52,6 +52,14 @@ const otcRoutes: FastifyPluginAsync = async (fastify) => {
       tags: ['otc'],
       summary: 'List OTC orders with optional status filter and cursor pagination',
       security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['QUOTED', 'ACCEPTED', 'EXECUTING', 'SETTLED', 'FAILED', 'CANCELLED', 'EXPIRED'] },
+          cursor: { type: 'string', description: 'Pagination cursor (last order ID from previous page)' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        },
+      },
     },
   }, async (req, reply) => {
     const schema = z.object({

@@ -80,6 +80,14 @@ export async function corridorRoutes(app: FastifyInstance) {
       tags: ['remittance'],
       summary: 'List remittance orders',
       security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['PENDING', 'FUNDED', 'PROCESSING', 'COMPLETED', 'FAILED', 'EXPIRED'] },
+          cursor: { type: 'string', description: 'Pagination cursor (last order ID from previous page)' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        },
+      },
     },
   }, async (request, reply) => {
     const schema = z.object({
