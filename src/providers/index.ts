@@ -2,6 +2,7 @@ import { mockCollectionProvider } from './collection/mock.js'
 import { mockRampProvider } from './ramp/mock.js'
 import { mockChainProvider } from './chain/mock.js'
 import { mockPayoutProvider } from './payout/mock.js'
+import { durianpayPayoutProvider } from './payout/durianpay.js'
 import type { CollectionProvider } from './collection/interface.js'
 import type { RampProvider } from './ramp/interface.js'
 import type { ChainProvider } from './chain/interface.js'
@@ -28,5 +29,6 @@ export function getChainProvider(): ChainProvider {
 
 export function getPayoutProvider(): PayoutProvider {
   if (mode === 'mock') return mockPayoutProvider
+  if (mode === 'durianpay') return durianpayPayoutProvider
   throw new Error(`Unknown PROVIDER_MODE: ${mode}`)
 }
