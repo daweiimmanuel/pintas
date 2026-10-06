@@ -363,6 +363,68 @@ model OtcOrder {
   @@index([createdAt(sort: Desc)])
 }
 
+// ─── Exporter Settlement (USD → USD) ─────────────────────────────────────────
+
+enum ExporterKybStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ExporterSegment {
+  FORK_B
+}
+
+enum PayoutAccountType {
+  OFFSHORE_USD
+  ID_BANK_USD
+}
+
+enum PayoutAccountStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Exporter {
+  id               String              @id @default(cuid())
+  legalName        String
+  nib              String
+  npwp             String
+  country          String              @default("ID")
+  segment          ExporterSegment     @default(FORK_B)
+  kybStatus        ExporterKybStatus   @default(PENDING)
+  kybTier          Int                 @default(0)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  payoutAccounts   PayoutAccount[]
+  buyers           Buyer[]
+}
+
+model PayoutAccount {
+  id                  String              @id @default(cuid())
+  exporterId          String
+  exporter            Exporter            @relation(fields: [exporterId], references: [id])
+  type                PayoutAccountType
+  bankName            String
+  accountNumberMasked String
+  accountRef          String
+  currency            String              @default("USD")
+  status              PayoutAccountStatus @default(ACTIVE)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+}
+
+model Buyer {
+  id         String   @id @default(cuid())
+  exporterId String
+  exporter   Exporter @relation(fields: [exporterId], references: [id])
+  legalName  String
+  country    String
+  email      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 enum RemittanceStatus {
   PENDING
   FUNDED

@@ -88,6 +88,20 @@ vi.mock('../../src/db/client.js', () => ({
       findUniqueOrThrow: vi.fn().mockResolvedValue(null),
       update: vi.fn().mockResolvedValue({ id: 'remit_001', status: 'PROCESSING', createdAt: new Date(), updatedAt: new Date() }),
     },
+    exporter: {
+      create: vi.fn().mockResolvedValue({ id: 'exp_001', legalName: 'PT Ekspor Jaya', nib: '1234567890123', npwp: '123456789012345', country: 'ID', segment: 'FORK_B', kybStatus: 'PENDING', kybTier: 0, createdAt: new Date(), updatedAt: new Date() }),
+      findUnique: vi.fn().mockResolvedValue({ id: 'exp_001', legalName: 'PT Ekspor Jaya', kybStatus: 'PENDING', kybTier: 0 }),
+      update: vi.fn().mockResolvedValue({ id: 'exp_001', kybStatus: 'APPROVED', kybTier: 1 }),
+    },
+    payoutAccount: {
+      create: vi.fn().mockResolvedValue({ id: 'pa_001', exporterId: 'exp_001', type: 'OFFSHORE_USD', bankName: 'Bank of America', accountNumberMasked: '****6789', currency: 'USD', status: 'ACTIVE', createdAt: new Date() }),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    buyer: {
+      create: vi.fn().mockResolvedValue({ id: 'buy_001', exporterId: 'exp_001', legalName: 'Acme Corp', country: 'US', email: 'ap@acme.com', createdAt: new Date(), updatedAt: new Date() }),
+      findUnique: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     webhook: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn().mockResolvedValue({ id: 'wh_001', customerId: 'cust_test_sprint4' }),
@@ -1007,5 +1021,118 @@ describe('Auth: POST /v1/auth/register', () => {
       payload: { name: 'PT Test', email: 'test@test.co.id' },
     })
     expect(res.statusCode).toBe(401)
+  })
+})
+
+// ─── M2: Exporters, Buyers, Payout Accounts ──────────────────────────────────
+
+describe('Exporters: POST /v1/exporters', () => {
+  it('creates an exporter → 201', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.exporter.create).mockResolvedValue({
+      id: 'exp_001', legalName: 'PT Ekspor Jaya', nib: '1234567890123',
+      npwp: '123456789012345', country: 'ID', segment: 'FORK_B',
+      kybStatus: 'PENDING', kybTier: 0, createdAt: new Date(), updatedAt: new Date(),
+    } as never)
+    const res = await server.inject({
+      method: 'POST', url: '/v1/exporters',
+      payload: { legalName: 'PT Ekspor Jaya', nib: '1234567890123', npwp: '123456789012345' },
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(body.data.id).toBe('exp_001')
+    expect(body.data.kybStatus).toBe('PENDING')
+  })
+
+  it('rejects missing required fields → 400', async () => {
+    const res = await server.inject({
+      method: 'POST', url: '/v1/exporters',
+      payload: { legalName: 'PT Ekspor Jaya' },
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(400)
+  })
+})
+
+describe('Exporters: POST /v1/exporters/:id/kyb', () => {
+  it('approves KYB → 200 with APPROVED status', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.exporter.findUnique).mockResolvedValue({
+      id: 'exp_001', legalName: 'PT Ekspor Jaya', kybStatus: 'PENDING', kybTier: 0,
+    } as never)
+    vi.mocked(prisma.exporter.update).mockResolvedValue({
+      id: 'exp_001', kybStatus: 'APPROVED', kybTier: 1,
+    } as never)
+    const res = await server.inject({
+      method: 'POST', url: '/v1/exporters/exp_001/kyb',
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.data.kybStatus).toBe('APPROVED')
+  })
+
+  it('returns 404 for unknown exporter', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.exporter.findUnique).mockResolvedValue(null)
+    const res = await server.inject({
+      method: 'POST', url: '/v1/exporters/unknown_id/kyb',
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(404)
+  })
+})
+
+describe('Exporters: POST /v1/exporters/:id/payout-accounts', () => {
+  it('creates a payout account with masked account number → 201', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.exporter.findUnique).mockResolvedValue({ id: 'exp_001' } as never)
+    vi.mocked(prisma.payoutAccount.create).mockResolvedValue({
+      id: 'pa_001', exporterId: 'exp_001', type: 'OFFSHORE_USD',
+      bankName: 'Bank of America', accountNumberMasked: '****6789',
+      currency: 'USD', status: 'ACTIVE', createdAt: new Date(),
+    } as never)
+    const res = await server.inject({
+      method: 'POST', url: '/v1/exporters/exp_001/payout-accounts',
+      payload: {
+        type: 'OFFSHORE_USD', bankName: 'Bank of America',
+        accountNumber: '1234506789', accountRef: 'ref_bofa_001',
+      },
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body.data.accountNumberMasked).toBe('****6789')
+    expect(body.data).not.toHaveProperty('accountNumber')
+  })
+})
+
+describe('Buyers: POST /v1/buyers', () => {
+  it('creates a buyer → 201', async () => {
+    const { prisma } = await import('../../src/db/client.js')
+    vi.mocked(prisma.buyer.create).mockResolvedValue({
+      id: 'buy_001', exporterId: 'exp_001', legalName: 'Acme Corp',
+      country: 'US', email: 'ap@acme.com', createdAt: new Date(), updatedAt: new Date(),
+    } as never)
+    const res = await server.inject({
+      method: 'POST', url: '/v1/buyers',
+      payload: { exporterId: 'exp_001', legalName: 'Acme Corp', country: 'US', email: 'ap@acme.com' },
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body.success).toBe(true)
+    expect(body.data.id).toBe('buy_001')
+  })
+
+  it('rejects invalid email → 400', async () => {
+    const res = await server.inject({
+      method: 'POST', url: '/v1/buyers',
+      payload: { exporterId: 'exp_001', legalName: 'Acme Corp', country: 'US', email: 'not-an-email' },
+      headers: { Authorization: 'Bearer test-api-key' },
+    })
+    expect(res.statusCode).toBe(400)
   })
 })

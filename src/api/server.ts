@@ -18,6 +18,8 @@ import apiKeysRoutes from './routes/api-keys.js'
 import meRoutes from './routes/me.js'
 import adminRoutes from './routes/admin.js'
 import authRoutes from './routes/auth.js'
+import exporterRoutes from '../modules/exporters/routes.js'
+import buyerRoutes from '../modules/buyers/routes.js'
 
 export async function buildServer() {
   const fastify = Fastify({
@@ -54,6 +56,8 @@ export async function buildServer() {
         { name: 'transactions', description: 'Unified transaction history' },
         { name: 'me', description: 'Customer profile' },
         { name: 'admin', description: 'Internal admin operations (requires admin:write scope)' },
+        { name: 'exporters', description: 'Exporter settlement — exporters, buyers, payout accounts' },
+        { name: 'settlements', description: 'Exporter settlement orders and state machine' },
       ],
       components: {
         securitySchemes: {
@@ -112,6 +116,8 @@ export async function buildServer() {
       await v1.register(meRoutes)
       await v1.register(authRoutes)
       await v1.register(adminRoutes)
+      await v1.register(exporterRoutes)
+      await v1.register(buyerRoutes)
     },
     { prefix: '/v1' }
   )
