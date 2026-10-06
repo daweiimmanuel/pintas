@@ -2,6 +2,8 @@ import { z } from 'zod'
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  APP_ENV: z.enum(['development', 'sandbox', 'production']).default('development'),
+  PROVIDER_MODE: z.enum(['mock', 'live']).default('mock'),
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default('0.0.0.0'),
   API_BASE_URL: z.string().default('http://localhost:3000'),

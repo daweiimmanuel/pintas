@@ -22,6 +22,7 @@ import exporterRoutes from '../modules/exporters/routes.js'
 import buyerRoutes from '../modules/buyers/routes.js'
 import quoteRoutes from '../modules/quotes/routes.js'
 import settlementRoutes from '../modules/settlements/routes.js'
+import sandboxRoutes from './routes/sandbox.js'
 
 export async function buildServer() {
   const fastify = Fastify({
@@ -60,6 +61,7 @@ export async function buildServer() {
         { name: 'admin', description: 'Internal admin operations (requires admin:write scope)' },
         { name: 'exporters', description: 'Exporter settlement — exporters, buyers, payout accounts' },
         { name: 'settlements', description: 'Exporter settlement orders and state machine' },
+        { name: 'sandbox', description: 'Sandbox simulation endpoints (sandbox env only)' },
       ],
       components: {
         securitySchemes: {
@@ -122,6 +124,9 @@ export async function buildServer() {
       await v1.register(buyerRoutes)
       await v1.register(quoteRoutes)
       await v1.register(settlementRoutes)
+      if (config.APP_ENV === 'sandbox' || config.NODE_ENV !== 'production') {
+        await v1.register(sandboxRoutes)
+      }
     },
     { prefix: '/v1' }
   )

@@ -39,6 +39,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     if (
       url === '/health' ||
       url.startsWith('/v1/callbacks/') ||
+      url.startsWith('/v1/sandbox/') ||
       url.startsWith('/docs') ||
       url.startsWith('/documentation') ||
       url === '/v1/auth/register'
