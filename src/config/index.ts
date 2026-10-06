@@ -42,8 +42,11 @@ const envSchema = z.object({
   BCA_CORP_ID: z.string().optional(),
   BCA_BIFFAST_URL: z.string().default('https://sandbox.bca.co.id'),
 
-  // Disbursement
-  DURIANPAY_API_KEY: z.string().optional(),
+  // Disbursement — DurianPay SNAP BI
+  DURIANPAY_API_KEY: z.string().optional(),       // API secret key (used for HMAC signatures)
+  DURIANPAY_CLIENT_KEY: z.string().optional(),    // X-CLIENT-KEY / Merchant Client ID
+  DURIANPAY_PARTNER_ID: z.string().optional(),    // X-PARTNER-ID assigned by DurianPay
+  DURIANPAY_CHANNEL_ID: z.string().default('95221'), // CHANNEL-ID (DurianPay default channel)
   DURIANPAY_API_URL: z.string().default('https://api.durianpay.id'),
   XENDIT_SECRET_KEY: z.string().optional(),
 
