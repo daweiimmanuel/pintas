@@ -47,6 +47,37 @@ const ratesRoutes: FastifyPluginAsync = async (fastify) => {
 
     return reply.send({ success: true, data: quote })
   })
+
+  // GET /v1/rates/live — WebSocket real-time rate feed
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fastify.get('/rates/live', { websocket: true }, (socket: any) => {
+    let subscribed: string[] = ['USDT', 'USDC']
+
+    async function tick() {
+      for (const coin of subscribed) {
+        try {
+          const rate = await getVwapRate(coin as Stablecoin)
+          if (socket.readyState === socket.OPEN) {
+            socket.send(JSON.stringify({ ...rate, updatedAt: new Date().toISOString() }))
+          }
+        } catch { /* skip on error */ }
+      }
+    }
+
+    // Send first tick immediately, then on interval
+    void tick()
+    const interval = setInterval(() => void tick(), 5000)
+
+    socket.on('message', (msg: Buffer) => {
+      try {
+        const data = JSON.parse(msg.toString()) as { subscribe?: string[] }
+        if (Array.isArray(data.subscribe)) subscribed = data.subscribe
+      } catch { /* ignore invalid messages */ }
+    })
+
+    socket.on('close', () => clearInterval(interval))
+    socket.on('error', () => clearInterval(interval))
+  })
 }
 
 export default ratesRoutes
