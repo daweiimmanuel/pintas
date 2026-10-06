@@ -13,6 +13,14 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       tags: ['admin'],
       summary: 'Approve or reject a Tier 3 KYC submission',
       security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['decision'],
+        properties: {
+          decision: { type: 'string', enum: ['APPROVED', 'REJECTED'] },
+          notes: { type: 'string', maxLength: 1000 },
+        },
+      },
     },
   }, async (req, reply) => {
     const schema = z.object({

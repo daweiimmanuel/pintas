@@ -136,6 +136,17 @@ const kycRoutes: FastifyPluginAsync = async (fastify) => {
       tags: ['kyc'],
       summary: 'Submit Tier 3 institutional KYB (manual review queue)',
       security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['companyName', 'npwp', 'uboNames'],
+        properties: {
+          companyName: { type: 'string', minLength: 2, maxLength: 200 },
+          npwp: { type: 'string', minLength: 15, maxLength: 20, description: 'Indonesian tax ID (NPWP)' },
+          uboNames: { type: 'array', items: { type: 'string', minLength: 2 }, minItems: 1, description: 'Ultimate beneficial owners' },
+          financialStatementUrl: { type: 'string', format: 'uri' },
+          amlQuestionnaireUrl: { type: 'string', format: 'uri' },
+        },
+      },
     },
   }, async (req, reply) => {
     const schema = z.object({
