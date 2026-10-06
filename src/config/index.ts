@@ -3,7 +3,7 @@ import { z } from 'zod'
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   APP_ENV: z.enum(['development', 'sandbox', 'production']).default('development'),
-  PROVIDER_MODE: z.enum(['mock', 'live']).default('mock'),
+  PROVIDER_MODE: z.enum(['mock', 'live', 'durianpay']).default('mock'),
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default('0.0.0.0'),
   API_BASE_URL: z.string().default('http://localhost:3000'),
@@ -45,11 +45,18 @@ const envSchema = z.object({
   BCA_BIFFAST_URL: z.string().default('https://sandbox.bca.co.id'),
 
   // Disbursement — DurianPay SNAP BI
-  DURIANPAY_API_KEY: z.string().optional(),       // API secret key (used for HMAC signatures)
+  DURIANPAY_API_KEY: z.string().optional(),       // Client secret — HMAC-SHA512 signing key
   DURIANPAY_CLIENT_KEY: z.string().optional(),    // X-CLIENT-KEY / Merchant Client ID
   DURIANPAY_PARTNER_ID: z.string().optional(),    // X-PARTNER-ID assigned by DurianPay
   DURIANPAY_CHANNEL_ID: z.string().default('95221'), // CHANNEL-ID (DurianPay default channel)
   DURIANPAY_API_URL: z.string().default('https://api.durianpay.id'),
+  DURIANPAY_PRIVATE_KEY: z.string().optional(),   // RSA private key PEM for B2B token signing
+  DURIANPAY_SOURCE_ACCOUNT_NO: z.string().optional(), // Merchant account ID (sourceAccountNo)
+  // Originator info — mandatory on every transfer from 14 Sep 2026 (PPATK)
+  DURIANPAY_ORIGINATOR_NAME: z.string().optional(),
+  DURIANPAY_ORIGINATOR_IDENTITY_TYPE: z.enum(['national_id', 'passport', 'company_id']).optional(),
+  DURIANPAY_ORIGINATOR_IDENTITY_NO: z.string().optional(),
+  DURIANPAY_ORIGINATOR_COUNTRY: z.string().default('ID'),
   XENDIT_SECRET_KEY: z.string().optional(),
 
   // KYC
